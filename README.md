@@ -68,7 +68,7 @@ Production accepts the host's `PORT` variable. Configure runtime secrets through
 ## Data and limitations
 
 - Ranking uses shortest TfL duration, then fewer changes, then less walking. Disruption status and weather provide context; they are not invented delay adjustments.
-- [TfL Unified API](https://api.tfl.gov.uk/swagger/docs/v1) provides stations, journey geometry and line status. Some geometry may be missing. Line status is not a measured delay for the individual journey.
+- [TfL Unified API](https://api.tfl.gov.uk) provides stations, journey geometry and line status. Some geometry may be missing. Line status is not a measured delay for the individual journey.
 - [Open-Meteo](https://open-meteo.com/) provides hourly forecasts near the origin and destination, not weather along the entire route. Forecast times and retrieval times are shown separately. Provider update times are unavailable when not supplied.
 - London timestamps use `Europe/London`, including daylight saving. Station data is cached for one hour; journey, status and forecast data are fetched per search.
 - The AI selects useful context, tradeoffs and limitations from an evidence catalog computed by the backend. The server renders fixed factual wording and rejects unknown evidence IDs, preventing free-form claims about unmeasured delays, clear skies or guaranteed zero walking. This does not make provider forecasts or journey estimates guarantees.
