@@ -65,7 +65,7 @@ function App() {
   function acceptJourney(result) {
     setData(result); setSelected(result.recommended_id); setOrigin(result.origin.id); setDestination(result.destination.id); setPreference(result.preference);
     setError(''); setRefreshFailed(false); setFeature(null); setSearchOpen(false); setRoutesVisible(true);
-    setSheetState(window.matchMedia('(max-width:760px)').matches && contextRef.current !== 'none' ? 'collapsed' : 'partial');
+    setSheetState(contextRef.current !== 'none' ? 'collapsed' : 'partial');
     requestAnimationFrame(() => document.querySelector('.search-tabs [aria-selected="true"]')?.focus({preventScroll: true}));
   }
   async function submit(event, refresh = false) {
@@ -102,10 +102,10 @@ function App() {
     <SearchDock mode={searchMode} onMode={setSearchMode} open={searchOpen} onOpen={value => {setSearchOpen(value); if (value) setSheetState('collapsed');}} journey={data} chatRef={chatRef} working={working}
       controlsProps={{stations, origin, destination, preference, sample, stationBusy, working, busy, error, onOrigin: changeOrigin, onDestination: changeDestination, onPreference: changePreference, onSwap: () => {setOrigin(destination); setDestination(origin); clearJourney();}, onSubmit: submit, onSample: changeSample}}
       chatProps={{onJourney: acceptJourney, busy: chatBusy, onBusyChange: setChatBusy, disabled: busy || stationBusy, sample, onLive: () => changeSample(false), aiConfigured: health?.openai_configured, acquire, release}}/>
-    <LayerSwitcher {...{routesVisible, activeContextLayer, field, weatherVariable, weatherPeriod, weatherOpacity, data, route}} onRoutes={() => setRoutesVisible(value => !value)} onContext={changeContext} onVariable={value => {setWeatherVariable(value); setFeature(null);}} onPeriod={value => {setWeatherPeriod(value); setFeature(null);}} onOpacity={setWeatherOpacity} onCoverage={() => setCoverageToken(value => value + 1)}/>
+    <LayerSwitcher {...{routesVisible, activeContextLayer, field, weatherVariable, weatherPeriod, weatherOpacity, data, route}} onRoutes={() => setRoutesVisible(value => !value)} onContext={changeContext} onVariable={value => {setWeatherVariable(value); setFeature(null);}} onPeriod={value => {setWeatherPeriod(value); setFeature(null);}} onOpacity={setWeatherOpacity} onCoverage={() => {setSearchOpen(false); setFeature(null); setSheetState('collapsed'); setCoverageToken(value => value + 1);}}/>
     {(sample || warnings.length > 0 || error) && <aside className="global-notice" role="status" tabIndex={0}>{sample && <strong>Fictional sample · not live travel information.</strong>}{busy && data && <p>Updating · previous journey snapshot remains visible.</p>}{error && <p>{refreshFailed ? 'Refresh failed · previous snapshot retained. ' : ''}{error}</p>}{warnings.map((warning, index) => <p key={index}>{warning}</p>)}</aside>}
     {!data && !working && !selectedFeature && !error && <div className="empty-map-hint"><Icon name="pin"/><div><strong>London, your way.</strong><p>Choose Journey or Ask AI above to compare station-to-station routes.</p></div></div>}
-    <button className="fit-journey" type="button" disabled={!data} onClick={() => {setSearchOpen(false); setFeature(null); setSheetState(window.matchMedia('(max-width:760px)').matches ? 'collapsed' : 'partial'); setFitToken(value => value + 1);}}><Icon name="fit"/><span>Fit journey</span></button>
+    <button className="fit-journey" type="button" disabled={!data} onClick={() => {setSearchOpen(false); setFeature(null); setSheetState(activeContextLayer !== 'none' || window.matchMedia('(max-width:760px)').matches ? 'collapsed' : 'partial'); setFitToken(value => value + 1);}}><Icon name="fit"/><span>Fit journey</span></button>
     <ResultsDock {...{data, route, selectedFeature, field, weatherVariable, weatherPeriod, sheetState, working, busy}} onState={value => {setSheetState(value); if(value === 'expanded')setSearchOpen(false);}} onSelect={selectRoute} onRefresh={() => submit(null, true)} onCloseFeature={() => {selectedFeature?.returnFocus?.(); setFeature(null); if (!data) setSheetState('collapsed');}}/>
     <SnapshotStatus {...{data, sample, working, refreshFailed}}/>
   </MapAppShell>;
