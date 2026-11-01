@@ -3,6 +3,8 @@ import { createRoot } from 'react-dom/client';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import './style.css';
+import JourneyChat from './JourneyChat.jsx';
+import './chat.css';
 
 const londonTime = value => {
   if (!value) return 'Unavailable';
@@ -67,6 +69,8 @@ function App() {
   const [sample,setSample]=useState(false),[stations,setStations]=useState([]),[origin,setOrigin]=useState(''),[destination,setDestination]=useState('');
   const [data,setData]=useState(null),[selected,setSelected]=useState(null),[busy,setBusy]=useState(false),[stationBusy,setStationBusy]=useState(true),[error,setError]=useState('');
   const [health,setHealth]=useState(null);
+  const [preference,setPreference]=useState('fastest'),[chatBusy,setChatBusy]=useState(false);
+  const working=busy||chatBusy;
   useEffect(()=>{api('/api/health').then(setHealth).catch(()=>{});},[]);
   useEffect(()=>{
     let cancelled=false;
@@ -82,27 +86,33 @@ function App() {
   async function submit(event) {
     event.preventDefault();setBusy(true);setError('');setData(null);
     try {
-      const result=await api('/api/plan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({origin,destination,sample})});
+      const result=await api('/api/plan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({origin,destination,sample,preference})});
       setData(result);setSelected(result.recommended_id);
     } catch(err) {setError(err.message);} finally {setBusy(false);}
   }
   const route=data?.routes.find(r=>r.id===selected);
+  function acceptChatJourney(result) {
+    setData(result);setSelected(result.recommended_id);setOrigin(result.origin.id);setDestination(result.destination.id);
+    setPreference(result.preference||'fastest');setError('');
+  }
   const lines=r=>[...new Set(r.legs.flatMap(l=>l.lines.map(n=>n.name)).filter(Boolean))];
   return <><header className="topbar"><a className="brand" href="/" aria-label="Waywise home"><span className="brand-mark"><Icon name="arrow"/></span>waywise<span className="brand-city">LONDON</span></a><div className="header-right"><span className="desktop-only">A little context. A better commute.</span><span className="edition">HACKATHON EDITION ↗</span></div></header>
     <main><section className="intro"><div><div className="eyebrow">LONDON TRANSPORT INTELLIGENCE</div><h1>Your city.<br/><em>Your better way.</em></h1><p>Routes, disruptions and the weather.<br/>One considered journey across London.</p></div><div className="intro-note"><span className="note-number">01 — 03</span><span>Plan.<br/>Compare.<br/>Go with context.</span></div></section>
-    <section className="planner" aria-label="Journey planner"><div className="form-header"><span className="section-tag"><Icon name="pin"/>WHERE ARE WE HEADING?</span><div className="mode-switch" aria-label="Data mode"><button type="button" className={!sample?'active':''} disabled={busy} onClick={()=>setSample(false)}>Live journey</button><button type="button" className={sample?'active':''} disabled={busy} onClick={()=>setSample(true)}>Sample demo</button></div></div>
+    <section className="planner" aria-label="Journey planner"><div className="form-header"><span className="section-tag"><Icon name="pin"/>WHERE ARE WE HEADING?</span><div className="mode-switch" aria-label="Data mode"><button type="button" className={!sample?'active':''} disabled={working} onClick={()=>setSample(false)}>Live journey</button><button type="button" className={sample?'active':''} disabled={working} onClick={()=>setSample(true)}>Sample demo</button></div></div>
       {sample && <div className="sample-banner">SAMPLE MODE · Fictional routes, times and weather. No live API or AI calls.</div>}
-      <form onSubmit={submit} className="journey-form"><label><span><i className="station-dot"/>FROM</span><select value={origin} onChange={e=>{setOrigin(e.target.value);setData(null);}} disabled={stationBusy||busy||sample} required aria-label="Origin station"><option value="">{stationBusy?'Loading stations…':'Choose a station'}</option>{stations.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
-      <button className="swap" type="button" title="Swap stations" aria-label="Swap stations" disabled={sample||busy||stationBusy} onClick={()=>{setOrigin(destination);setDestination(origin);setData(null);}}><Icon name="swap"/></button>
-      <label><span><i className="station-dot destination"/>TO</span><select value={destination} onChange={e=>{setDestination(e.target.value);setData(null);}} disabled={stationBusy||busy||sample} required aria-label="Destination station"><option value="">Choose a station</option>{stations.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
+      <form onSubmit={submit} className="journey-form"><label><span><i className="station-dot"/>FROM</span><select value={origin} onChange={e=>{setOrigin(e.target.value);setData(null);}} disabled={stationBusy||working||sample} required aria-label="Origin station"><option value="">{stationBusy?'Loading stations…':'Choose a station'}</option>{stations.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
+      <button className="swap" type="button" title="Swap stations" aria-label="Swap stations" disabled={sample||working||stationBusy} onClick={()=>{setOrigin(destination);setDestination(origin);setData(null);}}><Icon name="swap"/></button>
+      <label><span><i className="station-dot destination"/>TO</span><select value={destination} onChange={e=>{setDestination(e.target.value);setData(null);}} disabled={stationBusy||working||sample} required aria-label="Destination station"><option value="">Choose a station</option>{stations.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
       <div className="departure"><span>DEPARTURE</span><strong><Icon name="clock"/>Leave now</strong><small>London local time</small></div>
-      <button className="plan-button" disabled={busy||stationBusy||!origin||!destination}>{busy?'Finding your way…':'Find my journey'}<Icon name="arrow"/></button></form>
+      <button className="plan-button" disabled={working||stationBusy||!origin||!destination}>{busy?'Finding your way…':'Find my journey'}<Icon name="arrow"/></button></form>
+      <div className="preference-row"><span>PRIORITISE</span><div aria-label="Journey preference">{[['fastest','Quickest'],['less_walking','Less walking'],['fewer_changes','Fewer changes']].map(([value,label])=><button key={value} type="button" aria-pressed={preference===value} className={preference===value?'active':''} disabled={working} onClick={()=>{setPreference(value);setData(null);}}>{label}</button>)}</div></div>
       <div className="form-footer"><span>{stationBusy?'Connecting to TfL…':sample?'Explore a fictional Waterloo → Bank journey':'Station-to-station · TfL network'}</span><span className="key-status">{health?.openai_configured?'AI configured':'AI explanation awaiting API key'}</span></div>
     </section>
     {error&&<div className="error" role="alert"><strong>We couldn’t complete that request.</strong> {error} {!sample&&<button onClick={()=>setSample(true)}>Try the sample demo →</button>}</div>}
+    <JourneyChat journey={data} onJourney={acceptChatJourney} busy={chatBusy} onBusyChange={setChatBusy} disabled={busy||stationBusy} sample={sample} onLive={()=>setSample(false)}/>
     <section className="workspace"><div className="results"><div className="results-heading"><h2>{data?'Your options':'A journey that makes sense.'}</h2><span>{data?`${data.routes.length} ROUTES`:'THE WHOLE PICTURE'}</span></div>
       {busy?<div className="empty-state loading" role="status"><span className="loader"/><h3>Connecting the dots.</h3><p>Checking journeys, service status and endpoint weather. The explanation follows.</p></div>:!data?<div className="empty-state"><div className="empty-icon"><Icon name="train"/></div><h3>More than the quickest route.</h3><p>See the travel time, the changes and the conditions that matter before you leave.</p><div className="feature-row"><span>01 <b>Compare routes</b></span><span>02 <b>Check conditions</b></span><span>03 <b>Understand why</b></span></div></div>:<>
-      <div className="route-list">{data.routes.map((r,i)=><button key={r.id} className={'route-card '+(selected===r.id?'selected':'')} onClick={()=>setSelected(r.id)} aria-pressed={selected===r.id}><div className="route-top"><span className="route-index">0{i+1}</span><strong>{r.duration}<small> min</small></strong><span className={r.id===data.recommended_id?'badge':'route-time'}>{r.id===data.recommended_id?<><Icon name="check"/>QUICKEST</>:londonTime(r.departure)+' → '+londonTime(r.arrival)}</span></div><div className="line-pills">{lines(r).length?lines(r).map(name=><span key={name} style={{'--line-color':lineColor(name)}}>{name}</span>):<span style={{'--line-color':lineColor('walking')}}>Walk</span>}</div><div className="route-bottom"><span>{r.changes===0?'No changes':`${r.changes} change${r.changes===1?'':'s'}`} · {r.walking_minutes} min walking</span><span className="route-select">{selected===r.id?'Selected':'View route'} ↗</span></div></button>)}</div>
+      <div className="route-list">{data.routes.map((r,i)=><button key={r.id} className={'route-card '+(selected===r.id?'selected':'')} onClick={()=>setSelected(r.id)} aria-pressed={selected===r.id}><div className="route-top"><span className="route-index">0{i+1}</span><strong>{r.duration}<small> min</small></strong><span className={r.id===data.recommended_id?'badge':'route-time'}>{r.id===data.recommended_id?<><Icon name="check"/>{({fastest:'QUICKEST',less_walking:'LESS WALKING',fewer_changes:'FEWER CHANGES'})[data.preference||'fastest']}</>:londonTime(r.departure)+' → '+londonTime(r.arrival)}</span></div><div className="line-pills">{lines(r).length?lines(r).map(name=><span key={name} style={{'--line-color':lineColor(name)}}>{name}</span>):<span style={{'--line-color':lineColor('walking')}}>Walk</span>}</div><div className="route-bottom"><span>{r.changes===0?'No changes':`${r.changes} change${r.changes===1?'':'s'}`} · {r.walking_minutes} min walking reported</span><span className="route-select">{selected===r.id?'Selected':'View route'} ↗</span></div></button>)}</div>
       <div className="ranking-note">{data.ranking_rule}</div>
       </>}
       {data&&<div className="explanation"><div className="explanation-title"><Icon name="spark"/><h3>{data.explanation.status==='available'?'AI perspective':data.sample?'Sample perspective':'Recommendation context'}</h3><span>INTERPRETATION</span></div><p>{data.explanation.summary}</p>{data.explanation.tradeoffs.map((t,i)=><p className="small" key={i}>{t}</p>)}{data.explanation.limitations.map((t,i)=><p className="limitation" key={i}>{t}</p>)}</div>}

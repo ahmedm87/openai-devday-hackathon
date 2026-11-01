@@ -4,7 +4,7 @@ Prepared 1 November 2026, around 13:50 London time. Submission deadline: **17:00
 
 ## Goal and current state
 
-Ship A: one complete station-to-station journey with real TfL options, relevant disruption context, endpoint weather, selectable map routes and a grounded OpenAI explanation. C, a conversational interface, is optional after the core product is verified and deployed.
+Ship a complete station-to-station journey with real TfL options, relevant disruption context, endpoint weather, selectable map routes and grounded AI context. Feature C adds a bounded conversational interface on top of the same planner, with station clarification and preference refinements. Current work prioritises these features; hosting remains preparation only.
 
 - Public repository and initial React/MapLibre/FastAPI implementation are on `main`.
 - All 12 backend tests and the frontend production build pass locally and in [integration-branch CI](https://github.com/ahmedm87/openai-devday-hackathon/actions/runs/41314399045).
@@ -59,11 +59,11 @@ If starting late, compress the optional work first. Do not take time from the fi
 - [x] Add a per-process shared AI request cap with an explicit limit message.
 - [ ] Before public billable AI access, configure the OpenAI project's spending controls and host-level limits. No hosted deployment has been performed.
 
-## Optional C: decision at 15:15
+## Feature C: conversational planning
 
-Proceed only if A is deployed, a real OpenAI response is verified, the acceptance checks have no blocking failures, and both people agree that recording/submission time is protected. Otherwise skip C for this submission.
+The integration branch adds a chat panel using one bounded `plan_journey` call per interpreted message. It resolves station names against the real station list, asks for missing endpoints, offers choices for ambiguous stations and reuses the guided planner. Both interfaces support quickest, less walking and fewer changes.
 
-Add one chat panel that calls a bounded `plan_journey` tool around the existing planner. Resolve station names against the real station list and ask the user to choose when ambiguous. Validate tool arguments, cap tool calls and keep the existing cards, map and evidence display. Preserve the guided form as a fallback. No accounts, database, voice, notifications or multiple-agent architecture in this extension.
+Preserve the form, route cards, map and evidence display as the fallback and source of facts. Feature scope excludes accounts, a database, voice, notifications and multiple-agent orchestration. See [feature guide](FEATURES.md). Deployment is still preparation only; protect recording/submission time as the deadline approaches.
 
 ## Submission package
 

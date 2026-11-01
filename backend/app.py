@@ -8,6 +8,7 @@ from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
+from typing import Literal
 
 import httpx
 from dotenv import load_dotenv
@@ -56,6 +57,7 @@ class PlanRequest(BaseModel):
     origin: str = Field(min_length=1, max_length=100)
     destination: str = Field(min_length=1, max_length=100)
     sample: bool = False
+    preference: Literal['fastest', 'less_walking', 'fewer_changes'] = 'fastest'
 
 
 class ExplanationSelection(BaseModel):
@@ -68,7 +70,10 @@ def explanation_catalog(payload):
     """Only computed, evidence-backed wording can enter the displayed explanation."""
     selected = next(r for r in payload['routes'] if r['id'] == payload['recommended_id'])
     walking = selected['walking_minutes']
-    core = (f'The quickest returned option takes {selected["duration"]} minutes, with '
+    subject = {'fastest': 'The quickest returned option',
+               'less_walking': 'The returned option with the fewest walking-leg minutes',
+               'fewer_changes': 'The returned option with the fewest changes'}.get(payload.get('preference', 'fastest'))
+    core = (f'{subject} takes {selected["duration"]} minutes, with '
             f'{selected["changes"]} change(s) and {walking} minutes in TfL walking legs.')
     context, tradeoffs = {}, {}
     limitations = {
@@ -168,9 +173,12 @@ def relevant_statuses(route, statuses):
     return [s for s in statuses if s.get('id') in ids]
 
 
-def rank_routes(routes):
+def rank_routes(routes, preference='fastest'):
     # Duration first. Disruptions are displayed as context, not converted into invented delay estimates.
-    return sorted(routes, key=lambda r: (r['duration'], r['changes'], r['walking_minutes']))
+    keys = {'fastest': ('duration', 'changes', 'walking_minutes'),
+            'less_walking': ('walking_minutes', 'duration', 'changes'),
+            'fewer_changes': ('changes', 'duration', 'walking_minutes')}
+    return sorted(routes, key=lambda r: tuple(r[key] for key in keys[preference]))
 
 
 @app.get('/api/health')
@@ -271,7 +279,11 @@ async def plan(request: PlanRequest):
         if (request.origin, request.destination) != ('sample-waterloo', 'sample-bank'):
             raise HTTPException(422, 'The sample journey runs from Waterloo to Bank.')
         from backend.sample import sample_plan
-        return sample_plan()
+        result = sample_plan()
+        result['preference'] = request.preference
+        result['routes'] = rank_routes(result['routes'], request.preference)
+        result['recommended_id'] = result['routes'][0]['id']
+        return result
     station_data = await stations()
     by_id = {s['id']: s for s in station_data['stations']}
     if request.origin not in by_id or request.destination not in by_id:
@@ -282,11 +294,11 @@ async def plan(request: PlanRequest):
         try:
             departure_time = datetime.now(ZoneInfo('Europe/London'))
             raw = await get_json(client, f'{TFL}/Journey/JourneyResults/{request.origin}/to/{request.destination}',
-                                 {**tfl_auth(), 'timeIs': 'departing', 'journeyPreference': 'leasttime',
+                                 {**tfl_auth(), 'timeIs': 'departing', 'journeyPreference': {'fastest': 'leasttime', 'less_walking': 'leastwalking', 'fewer_changes': 'leastinterchange'}[request.preference],
                                   'date': departure_time.strftime('%Y%m%d'), 'time': departure_time.strftime('%H%M'),
                                   'calcOneDirection': 'true', 'includeAlternativeRoutes': 'true'})
             fetched = now()
-            routes = rank_routes([normalize_journey(j, i) for i, j in enumerate(raw.get('journeys', []))])[:3]
+            routes = rank_routes([normalize_journey(j, i) for i, j in enumerate(raw.get('journeys', []))], request.preference)[:3]
             if not routes or any(not r['legs'] for r in routes):
                 raise ValueError('No routes')
         except (httpx.HTTPError, ValueError, KeyError, TypeError):
@@ -320,8 +332,12 @@ async def plan(request: PlanRequest):
         route['status_available'] = status_ok
         if not all(len(leg['geometry']) >= 2 for leg in route['legs']):
             warnings.append(f'{route["id"]}: some route geometry is unavailable; map may be incomplete.')
+    ranking_rule = {'fastest': 'Shortest TfL journey duration; ties use fewer changes, then less walking.',
+                    'less_walking': 'Fewest TfL walking-leg minutes; ties use shortest duration, then fewer changes.',
+                    'fewer_changes': 'Fewest changes; ties use shortest duration, then less walking.'}[request.preference]
     payload = {'sample': False, 'origin': origin, 'destination': destination, 'routes': routes,
-               'recommended_id': routes[0]['id'], 'ranking_rule': 'Shortest TfL journey duration; ties use fewer changes, then less walking. Disruption status and weather are context, not predicted delay adjustments.',
+               'preference': request.preference,
+               'recommended_id': routes[0]['id'], 'ranking_rule': ranking_rule + ' Disruption status and weather are context, not predicted delay adjustments.',
                'weather': weather, 'warnings': list(dict.fromkeys(warnings)),
                'sources': [{'name': 'TfL journeys', 'retrieved_at': fetched, 'provider_updated_at': None},
                            {'name': 'TfL line status', 'retrieved_at': now() if status_ok else None, 'provider_updated_at': None}],
@@ -329,6 +345,9 @@ async def plan(request: PlanRequest):
     payload['explanation'] = await explain(payload)
     return payload
 
+
+from backend.chat import router as chat_router
+app.include_router(chat_router)
 
 # Production uses one origin: FastAPI serves the Vite build after API routes.
 if (ROOT / 'frontend' / 'dist').is_dir():

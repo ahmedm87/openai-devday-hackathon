@@ -1,6 +1,17 @@
 # Waywise — London Transport Intelligence
 
-A guided station-to-station journey planner for the DevDay Exchange Community Hackathon. React and MapLibre show route options; FastAPI coordinates TfL journeys, disruption context, Open-Meteo endpoint forecasts and an optional OpenAI explanation.
+A station-to-station journey planner and conversational assistant for the DevDay Exchange Community Hackathon. React and MapLibre show route options; FastAPI coordinates TfL journeys, disruption context, Open-Meteo endpoint forecasts and OpenAI-assisted intent parsing and explanations.
+
+## Features
+
+- **Guided planner:** choose two TfL stations and prioritise quickest, less walking or fewer changes.
+- **Ask Waywise:** type a journey such as “Waterloo to Bank with less walking”. The assistant uses the same live planner and updates the existing route cards and map.
+- **Station clarification:** ambiguous names produce station-choice buttons; missing endpoints trigger a follow-up question.
+- **Follow-up requests:** “same journey, fewer changes” reuses the current endpoints. A conversation stays in page memory and can be cleared.
+- **Evidence view:** route steps, matching line status, endpoint forecasts, timestamps and evidence-constrained AI context remain visible.
+- **Guided fallback:** the form remains available if chat is unavailable. Sample mode is visibly fictional and does not call live providers or AI.
+
+Chat currently plans journeys leaving now. It does not silently apply unsupported requests for fares, step-free access, avoiding particular lines, arbitrary addresses or future departure times. See [feature guide](docs/FEATURES.md) for examples and scope.
 
 ## Local setup
 
@@ -67,7 +78,7 @@ Production accepts the host's `PORT` variable. Configure runtime secrets through
 
 ## Data and limitations
 
-- Ranking uses shortest TfL duration, then fewer changes, then less walking. Disruption status and weather provide context; they are not invented delay adjustments.
+- Ranking follows the selected preference: quickest uses duration, less walking uses TfL walking-leg minutes, and fewer changes uses transfer count. Duration breaks preference ties. Disruption status and weather provide context; they are not invented delay adjustments.
 - [TfL Unified API](https://api.tfl.gov.uk) provides stations, journey geometry and line status. Some geometry may be missing. Line status is not a measured delay for the individual journey.
 - [Open-Meteo](https://open-meteo.com/) provides hourly forecasts near the origin and destination, not weather along the entire route. Forecast times and retrieval times are shown separately. Provider update times are unavailable when not supplied.
 - London timestamps use `Europe/London`, including daylight saving. Station data is cached for one hour; journey, status and forecast data are fetched per search.
@@ -83,6 +94,6 @@ Map rendering: [MapLibre GL JS](https://maplibre.org/). Basemap: [OpenFreeMap](h
 
 Application code was created during the hackathon with Codex assistance, following initial README/contribution boilerplate. No pre-existing application template was used. Codex scaffolded the app, inspected the TfL schema, corrected nested line identifiers and London timezone handling, and wrote tests for provider failures and sample isolation.
 
-See the [two-person build plan and demo outline](docs/BUILD_PLAN.md) and [contribution guide](CONTRIBUTING.md). Work on feature branches and pull current `main` before starting. Conversational mode C remains a stretch goal after the guided planner works with real data and an OpenAI key.
+See the [two-person build plan and demo outline](docs/BUILD_PLAN.md) and [contribution guide](CONTRIBUTING.md). Work on feature branches and pull current `main` before starting. The conversational feature is on the integration branch alongside the guided planner.
 
 Submission still needs a deployed URL, real OpenAI verification, and a demo video of no more than 90 seconds.
