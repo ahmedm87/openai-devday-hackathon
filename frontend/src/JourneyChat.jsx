@@ -23,8 +23,8 @@ export default function JourneyChat({requestRef, journey, onJourney, busy, onBus
       if (!response.ok) throw new Error(typeof result.detail === 'string' ? result.detail : 'Chat is unavailable. Use Journey to select stations.');
       setPending(result.pending);
       setMessages(previous => [...previous, {role: 'assistant', content: result.message, clarification: result.clarification, status: result.status}]);
-      if (result.journey) onJourney(result.journey);
-    } catch (failure) {setMessages(previous => [...previous, {role: 'assistant', content: failure.message, status: 'error'}]);}
+      if (result.journey) onJourney(result.journey); else onOpen();
+    } catch (failure) {setMessages(previous => [...previous, {role: 'assistant', content: failure.message, status: 'error'}]); onOpen();}
     finally {sending.current = false; onBusyChange(false); release();}
   }
   const locked = busy || disabled || sample || aiConfigured === false;
@@ -34,6 +34,6 @@ export default function JourneyChat({requestRef, journey, onJourney, busy, onBus
       {messages.length === 1 && <div className="chat-examples">{['Waterloo to Bank', 'Victoria to Stratford with fewer changes'].map(example => <button type="button" disabled={locked} key={example} onClick={() => send(example)}>{example}</button>)}</div>}
       {journey && !pending && <div className="chat-refinements"><span>Same journey:</span><button type="button" disabled={locked} onClick={() => send('Same journey with less walking')}>Less walking</button><button type="button" disabled={locked} onClick={() => send('Same journey with fewer changes')}>Fewer changes</button></div>}
     </>}
-    {messages.length > 1 && <button className="text-button clear-chat" type="button" disabled={busy} onClick={() => {setMessages([welcome]); setPending(null);}}>Clear conversation</button>}
+    {messages.length > 1 && <button className="text-button clear-chat" type="button" disabled={busy} onClick={() => {setMessages([welcome]); setPending(null); onSent();}}>Clear conversation</button>}
   </section>;
 }

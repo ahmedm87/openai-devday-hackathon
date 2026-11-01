@@ -23,5 +23,5 @@ export default function useWeatherField(active, sample) {
     })();
     return () => controller.abort();
   }, [active, sample, retry]);
-  return {...state, retry: () => {cached.current = null; setRetry(value => value + 1);}};
+  return {...(sample ? {status: 'sample', data: null, error: ''} : state), retry: () => {cached.current = null; setRetry(value => value + 1);}};
 }

@@ -2,6 +2,7 @@ import React, {useEffect, useRef, useState} from 'react';
 import maplibregl from 'maplibre-gl';
 import {affectedLeg, weatherFeatures, weatherVariables} from '../mapData.js';
 import {lineColor} from '../ui.jsx';
+import MapLegend from './MapLegend.jsx';
 
 const routeLayers = ['route-selected-transit', 'route-selected-walk', 'route-alternative-transit', 'route-alternative-walk'];
 const empty = () => ({type: 'FeatureCollection', features: []});
@@ -12,20 +13,28 @@ function overlayPadding(map) {
   const search = root.querySelector('[data-map-overlay="top"]')?.getBoundingClientRect();
   const context = root.querySelector('[data-map-overlay="context"]')?.getBoundingClientRect();
   const results = root.querySelector('[data-map-overlay="results"]')?.getBoundingClientRect();
+  const notice = root.querySelector('.global-notice')?.getBoundingClientRect();
   const mobile = rect.width <= 760;
-  const top = mobile ? Math.max(search?.bottom || 0, context?.bottom || 0) - rect.top + 22 : (search?.bottom || rect.top + 90) - rect.top + 24;
-  const bottom = results ? rect.bottom - results.top + 20 : 84;
-  return {top: Math.min(top, rect.height * .4), bottom: Math.min(bottom, rect.height * .4), left: mobile ? 50 : 60, right: mobile ? 50 : Math.min((context?.width || 280) + 44, rect.width * .32)};
+  const top = mobile ? Math.max(search?.bottom || 0, context?.bottom || 0) - rect.top + 60 : Math.max(search?.bottom || rect.top + 90, notice?.bottom || 0) - rect.top + 60;
+  const bottom = results ? rect.bottom - results.top + 24 : 84;
+  const weather = !!root.querySelector('.weather-context');
+  return {top, bottom, left: mobile ? weather ? 74 : 50 : weather ? 92 : 60, right: mobile ? weather ? 114 : 86 : Math.min((context?.width || 280) + 44, rect.width * .32)};
 }
 
 export default function JourneyMap({data, selectedId, onSelectRoute, onFeature, routesVisible, activeContextLayer, field, weatherVariable, weatherPeriod, weatherOpacity, fitToken, coverageToken}) {
   const container = useRef(null), mapRef = useRef(null), latest = useRef(null);
-  const bounds = useRef(null), lastPlan = useRef(null);
+  const bounds = useRef(null), lastPlan = useRef(null), pendingFit = useRef(false);
   const [ready, setReady] = useState(false), [error, setError] = useState('');
   latest.current = {data, selectedId, onSelectRoute, onFeature, activeContextLayer, routesVisible};
 
   function fitJourney() {
-    if (mapRef.current && bounds.current) mapRef.current.fitBounds(bounds.current, {padding: overlayPadding(mapRef.current), maxZoom: 14, duration: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 500});
+    const map = mapRef.current;
+    if (!map || !bounds.current) return;
+    const padding = overlayPadding(map), rect = container.current.getBoundingClientRect();
+    // A closing phone keyboard can briefly leave too little room. Fit once it resizes.
+    if (rect.height - padding.top - padding.bottom < 70 || rect.width - padding.left - padding.right < 70) return;
+    pendingFit.current = false;
+    map.fitBounds(bounds.current, {padding, maxZoom: 14, duration: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 500});
   }
 
   useEffect(() => {
@@ -59,7 +68,7 @@ export default function JourneyMap({data, selectedId, onSelectRoute, onFeature, 
         const weatherHit = latest.current.activeContextLayer === 'weather' && map.getLayer('weather-field') && map.queryRenderedFeatures(event.point, {layers: ['weather-field']}).length;
         map.getCanvas().style.cursor = hits(event.point).length || weatherHit ? 'pointer' : '';
       });
-      observer = new ResizeObserver(() => map.resize());
+      observer = new ResizeObserver(() => {map.resize(); if (pendingFit.current) requestAnimationFrame(fitJourney);});
       observer.observe(container.current);
     } catch {setError('Map unavailable in this browser. Journey facts remain available in Details.');}
     return () => {observer?.disconnect(); map?.remove(); mapRef.current = null;};
@@ -97,11 +106,11 @@ export default function JourneyMap({data, selectedId, onSelectRoute, onFeature, 
     if (data && lastPlan.current !== data) {
       const next = new maplibregl.LngLatBounds();
       [...features.flatMap(feature => feature.geometry.coordinates), [data.origin.lon, data.origin.lat], [data.destination.lon, data.destination.lat]].forEach(coordinate => next.extend(coordinate));
-      bounds.current = next; lastPlan.current = data;
+      bounds.current = next; lastPlan.current = data; pendingFit.current = true;
       const frame = requestAnimationFrame(fitJourney);
       return () => cancelAnimationFrame(frame);
     }
-    if (!data) {bounds.current = null; lastPlan.current = null;}
+    if (!data) {bounds.current = null; lastPlan.current = null; pendingFit.current = false;}
   }, [data, selectedId, routesVisible, activeContextLayer, ready]);
 
   useEffect(() => {
@@ -117,10 +126,14 @@ export default function JourneyMap({data, selectedId, onSelectRoute, onFeature, 
     map.setPaintProperty('weather-field', 'fill-opacity', ['case', ['get', 'available'], weatherVariable === 'rain_probability' ? ['*', weatherOpacity, ['interpolate', ['linear'], ['get','value'], 0, .3, 100, 1]] : weatherOpacity, 0]);
   }, [ready, activeContextLayer, field.status, field.data, weatherVariable, weatherPeriod, weatherOpacity]);
 
-  useEffect(() => {if (fitToken > 0) requestAnimationFrame(fitJourney);}, [fitToken]);
+  useEffect(() => {if (fitToken > 0) {pendingFit.current = true; requestAnimationFrame(fitJourney);}}, [fitToken]);
   useEffect(() => {
     const map = mapRef.current, area = field.data?.coverage_bounds;
-    if (coverageToken && map && ready && area) map.fitBounds([[area[0],area[1]],[area[2],area[3]]], {padding: overlayPadding(map), duration: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 500});
+    if (coverageToken && map && ready && area) {
+      const padding = overlayPadding(map), rect = container.current.getBoundingClientRect();
+      if (rect.height - padding.top - padding.bottom < 70 || rect.width - padding.left - padding.right < 70) return;
+      map.fitBounds([[area[0],area[1]],[area[2],area[3]]], {padding, duration: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 500});
+    }
   }, [coverageToken]);
 
   useEffect(() => {
@@ -155,5 +168,5 @@ export default function JourneyMap({data, selectedId, onSelectRoute, onFeature, 
     return () => markers.forEach(marker => marker.remove());
   }, [data, selectedId, activeContextLayer, routesVisible, ready]);
 
-  return <section className="map-background" aria-label="London journey map"><div ref={container} className="map-canvas"/>{error && <p className="map-error" role="status">{error}</p>}<div className="map-key" aria-label="Map legend"><span><i/>Selected</span><span><i className="muted"/>Alternative</span><span><i className="walking"/>Walking</span>{activeContextLayer === 'weather' && <span>Forecasts · tap a point or sampling area</span>}</div></section>;
+  return <section className="map-background" aria-label="London journey map"><div ref={container} className="map-canvas"/>{error && <p className="map-error" role="status">{error}</p>}<MapLegend context={activeContextLayer}/></section>;
 }

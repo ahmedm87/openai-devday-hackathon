@@ -48,8 +48,8 @@ svg { width:20px; height:20px; flex-shrink:0; }
 .ask-surface input { flex:1; width:100%; min-width:0; min-height:44px; padding:7px 2px; border:0; background:transparent; font-size:16px; }
 .ask-surface input::placeholder { font-size:12px; }
 .ask-surface button { display:grid; place-items:center; min-width:44px; min-height:44px; border:0; border-radius:9px; background:var(--sage); }
-.search-popover { margin-top:8px; background:#fff; border:1px solid var(--border); border-radius:15px; box-shadow:0 12px 36px #16343e20; max-height:calc(100% + 65dvh); overflow-y:auto; overscroll-behavior:contain; padding:8px 18px 16px; scrollbar-width:thin; }
-.popover-heading { display:flex; align-items:center; justify-content:space-between; gap:10px; font-size:12px; font-weight:700; margin-bottom:4px; }
+.search-popover { margin-top:8px; background:#fff; border:1px solid var(--border); border-radius:15px; box-shadow:0 12px 36px #16343e20; max-height:calc(var(--app-height,100dvh) - 160px); overflow-y:auto; overscroll-behavior:contain; padding:8px 18px 16px; scrollbar-width:thin; }
+.popover-heading { position:sticky; top:-8px; z-index:8; display:flex; align-items:center; justify-content:space-between; gap:10px; font-size:12px; font-weight:700; margin-bottom:4px; background:#fff; }
 .popover-heading .icon-button { margin-right:-8px; }
 .journey-controls { min-width:0; }
 .station-search { position:relative; min-width:0; }
@@ -203,6 +203,8 @@ svg { width:20px; height:20px; flex-shrink:0; }
   .summary-recommended>span { display:none; }
 }
 @media(max-width:760px) {
+  .map-app.sheet-collapsed { --sheet-space:150px; }
+  .map-app.sheet-partial { --sheet-space:350px; }
   .app-header { top:max(10px,env(safe-area-inset-top)); left:12px; right:12px; }
   .brand { font-size:24px; gap:6px; }
   .brand-mark { width:30px; height:30px; border-radius:8px; }
@@ -217,10 +219,10 @@ svg { width:20px; height:20px; flex-shrink:0; }
   .search-tabs { padding:2px 5px; border-radius:0 0 10px 10px; }
   .search-tabs button { min-height:40px; padding:6px 9px; font-size:10px; }
   .search-tabs>span { font-size:9px; }
-  .search-popover { padding:6px 14px 12px; max-height:calc(100dvh - 205px); max-height:calc(100% + 65dvh); }
+  .search-popover { padding:6px 14px 12px; max-height:calc(var(--app-height,100dvh) - 205px); }
   .popover-heading { font-size:11px; }
   .preference-control button { font-size:10px; }
-  .layer-switcher { top:calc(max(10px,env(safe-area-inset-top)) + 166px); left:12px; right:12px; width:auto; }
+  .layer-switcher { top:calc(max(10px,env(safe-area-inset-top)) + 166px); left:12px; right:12px; width:auto; max-height:calc(var(--app-height,100dvh) - 240px); overflow-y:auto; overscroll-behavior:contain; scrollbar-width:thin; }
   .layer-row { gap:3px; padding:4px; }
   .layer-row button { min-height:40px; font-size:10px; padding:6px; }
   .layer-row>button { gap:4px; }
@@ -231,14 +233,14 @@ svg { width:20px; height:20px; flex-shrink:0; }
   .context-caption { font-size:9px; }
   .weather-settings summary { min-height:40px; font-size:10px; }
   .weather-settings summary>span { font-size:9px; }
-  .weather-settings-body { max-height:min(285px,36dvh); }
+  .weather-settings-body { max-height:min(285px,max(44px,calc(var(--app-height,100dvh) - 350px))); }
   .weather-scale { margin:2px 0 5px; }
   .weather-scale>div { height:7px; }
   .weather-scale b { font-size:8px; }
   .weather-context>.context-caption { font-size:8px; }
   .global-notice { left:12px; right:12px; top:calc(max(10px,env(safe-area-inset-top)) + 220px); max-width:none; max-height:76px; font-size:9px; padding:8px 10px; }
   .global-notice strong { font-size:9px; }
-  .map-app:has(.weather-context) .global-notice,.map-app:has(.disruption-context) .global-notice { top:auto; bottom:calc(var(--sheet-space) + 8px); }
+  .map-app:has(.weather-context) .global-notice,.map-app:has(.disruption-context) .global-notice { top:auto; right:128px; bottom:calc(var(--sheet-space) + 8px); }
   .empty-map-hint { bottom:96px; padding:13px 15px; width:310px; }
   .empty-map-hint strong { font-size:15px; }
   .empty-map-hint p { font-size:10px; }
@@ -246,7 +248,7 @@ svg { width:20px; height:20px; flex-shrink:0; }
   .maplibregl-ctrl-top-right { right:2px; top:calc(45% - 36px); }
   .maplibregl-ctrl-group button { width:40px; height:40px; }
   .endpoint-marker { min-width:40px; min-height:40px; border-radius:10px; }
-  .with-forecast>span:last-child { font-size:10px; }
+  .with-forecast>span:last-child { max-width:70px; font-size:10px; white-space:normal; text-align:left; }
   .endpoint-letter { min-width:28px; height:28px; font-size:11px; }
   .disruption-marker { max-width:160px; font-size:10px; }
   .map-error { left:12px; right:70px; top:310px; font-size:10px; padding:9px; }
@@ -264,7 +266,7 @@ svg { width:20px; height:20px; flex-shrink:0; }
   .sheet-actions button:first-child span { display:none; }
   .sheet-actions svg { width:12px; height:12px; }
   .sheet-scroll { max-height:206px; padding:0 9px 4px; }
-  .results-dock.expanded { height:calc(100% - 185px); }
+  .results-dock.expanded { height:calc(100% - 255px); }
   .results-dock.expanded .sheet-scroll { height:calc(100% - 62px); }
   .route-summaries { gap:5px; }
   .route-summary { display:flex; flex-direction:column; gap:3px; padding:9px 8px; min-height:115px; }
@@ -304,7 +306,7 @@ svg { width:20px; height:20px; flex-shrink:0; }
   .weather-settings summary>span { font-size:8px; }
 }
 @media(max-height:550px) {
-  .search-popover { max-height:calc(100dvh - 135px); }
+  .search-popover { max-height:calc(var(--app-height,100dvh) - 205px); }
   .layer-switcher { max-height:45%; overflow-y:auto; }
   .results-dock { max-height:55%; }
   .map-key { display:none; }

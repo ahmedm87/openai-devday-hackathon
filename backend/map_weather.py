@@ -138,6 +138,7 @@ async def load_weather():
             result = normalise_batch(raw, start, datetime.now(timezone.utc))
         except (httpx.HTTPError, ValueError, TypeError, KeyError):
             message = 'The area forecast is unavailable. Journey planning and endpoint forecasts remain independent. Try again shortly.'
+            weather_cache.clear()
             weather_cache[key] = {'expires': time.monotonic() + 30, 'error': message}
             raise HTTPException(503, message) from None
         weather_cache.clear()

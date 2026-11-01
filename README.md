@@ -1,14 +1,17 @@
 # Waywise — London Transport Intelligence
 
-A station-to-station journey planner and conversational assistant for the DevDay Exchange Community Hackathon. React and MapLibre show route options; FastAPI coordinates TfL journeys, disruption context, Open-Meteo endpoint forecasts and OpenAI-assisted intent parsing and explanations.
+A map-first London journey explorer for the DevDay Exchange Community Hackathon. React and MapLibre show journeys and forecast fields; FastAPI coordinates TfL routes/status, Open-Meteo forecasts and OpenAI-assisted intent parsing and explanations.
 
 ## Features
 
-- **Guided planner:** choose two TfL stations and prioritise quickest, less walking or fewer changes.
+- **Full-map workspace:** Journey / Ask AI search, independent journey/context layers, and a bounded Summary / Routes / Details sheet.
+- **Guided planner:** search supported London station suggestions and prioritise quickest, less walking or fewer changes.
 - **Ask Waywise:** type a journey such as “Waterloo to Bank with less walking”. The assistant uses the same live planner and updates the existing route cards and map.
 - **Station clarification:** ambiguous names produce station-choice buttons; missing endpoints trigger a follow-up question.
 - **Follow-up requests:** “same journey, fewer changes” reuses the current endpoints. A conversation stays in page memory and can be cleared.
-- **Evidence view:** route steps, matching line status, endpoint forecasts, timestamps and evidence-constrained AI context remain visible.
+- **Weather fields:** cached Temperature and Rain chance sampling polygons over a labelled central-London demo extent, with forecast-time/opacity controls and source-value details. Sample mode disables the area field.
+- **This-journey disruptions:** returned line/status context on matching route legs, with reasons and retrieval times; these are not incident locations or measured delay estimates.
+- **Evidence view:** expand Details for complete route steps, matching line status, endpoint forecasts, timestamps and evidence-constrained AI context.
 - **Guided fallback:** the form remains available if chat is unavailable. Sample mode is visibly fictional and does not call live providers or AI.
 
 Chat currently plans journeys leaving now. It does not silently apply unsupported requests for fares, step-free access, avoiding particular lines, arbitrary addresses or future departure times. See [feature guide](docs/FEATURES.md) for examples and scope.
@@ -62,6 +65,7 @@ Use the virtual environment's Python executable, or activate it before these com
 ```sh
 python -m pytest backend/tests -q
 cd frontend
+npm test
 npm run build
 cd ..
 python -m uvicorn backend.app:app --host 127.0.0.1 --port 8000
@@ -81,6 +85,7 @@ Production accepts the host's `PORT` variable. Configure runtime secrets through
 - Ranking follows the selected preference: quickest uses duration, less walking uses TfL walking-leg minutes, and fewer changes uses transfer count. Duration breaks preference ties. Disruption status and weather provide context; they are not invented delay adjustments.
 - [TfL Unified API](https://api.tfl.gov.uk) provides stations, journey geometry and line status. Some geometry may be missing. Line status is not a measured delay for the individual journey.
 - [Open-Meteo](https://open-meteo.com/) provides hourly forecasts near the origin and destination, not weather along the entire route. Forecast times and retrieval times are shown separately. Provider update times are unavailable when not supplied.
+- The separate `/api/map/weather?area=london-demo` endpoint samples a fixed 5×5 area grid. Polygons are application sampling areas, not native weather-model cells or radar. Returned coordinates and duplicate-location relationships are preserved. Each batch represents 25 requested locations; the 10-minute per-process cache avoids provider requests for pan, time, variable and opacity changes. See [map-first handoff](docs/MAP_FIRST_HANDOFF.md) for intervals, cache behaviour and limitations.
 - London timestamps use `Europe/London`, including daylight saving. Station data is cached for one hour; journey, status and forecast data are fetched per search.
 - The AI selects useful context, tradeoffs and limitations from an evidence catalog computed by the backend. The server renders fixed factual wording and rejects unknown evidence IDs, preventing free-form claims about unmeasured delays, clear skies or guaranteed zero walking. This does not make provider forecasts or journey estimates guarantees.
 
@@ -96,6 +101,6 @@ Application code was created during the hackathon with Codex assistance, followi
 
 See the [two-person build plan and demo outline](docs/BUILD_PLAN.md) and [contribution guide](CONTRIBUTING.md). Work on feature branches and pull current `main` before starting. The conversational feature is on the integration branch alongside the guided planner.
 
-The [frontend feedback handoff](docs/FRONTEND_FEEDBACK.md) describes the latest workspace, mobile, map and chat changes and the checks performed.
+The [map-first handoff](docs/MAP_FIRST_HANDOFF.md) describes the current workspace, layers, weather contract and verification. The [earlier frontend feedback handoff](docs/FRONTEND_FEEDBACK.md) records the superseded sidebar design.
 
 Submission still needs a deployed URL, a signed-out hosted walkthrough and a demo video of no more than 90 seconds.

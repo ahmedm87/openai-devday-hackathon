@@ -1,5 +1,7 @@
 # Frontend feedback handoff — 1 November 2026
 
+This records the earlier sidebar design. The current interface and checks are described in the [map-first handoff](MAP_FIRST_HANDOFF.md).
+
 The feedback in `frontend_codex_handoff.md` has been applied on `codex/live-integration`. The first implementation is in `7a4895e`; the follow-up improves map click targets and mobile forecast readability. No backend schema or dependency changes were needed.
 
 ## What changed

@@ -18,6 +18,14 @@ export const lineColor = name => ({
   dlr: '#299e9b', elizabeth: '#7962b5', 'elizabeth line': '#7962b5', walking: '#c77840',
 }[name?.toLowerCase()] || '#677bc3');
 
+export function londonStamp(value) {
+  if (!value) return 'Unavailable';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? 'Unavailable' : new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/London', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+  }).format(date);
+}
+
 export function Icon({name, ...props}) {
   const paths = {
     arrow: 'M4 12h16m-6-6 6 6-6 6', pin: 'M20 10c0 6-8 11-8 11S4 16 4 10a8 8 0 1 1 16 0Zm-8-3v6m-3-3h6',
