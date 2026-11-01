@@ -137,7 +137,7 @@ async def stations(sample: bool = False):
     if station_cache['expires'] > time.monotonic():
         return station_cache['result']
     try:
-        async with httpx.AsyncClient(timeout=25) as client:
+        async with httpx.AsyncClient(timeout=60) as client:
             data = await get_json(client, TFL + '/StopPoint/Mode/tube,dlr,elizabeth-line,overground', tfl_auth())
         unique = {}
         for stop in data.get('stopPoints', []):
