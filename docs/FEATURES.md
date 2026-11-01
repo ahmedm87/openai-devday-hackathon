@@ -42,4 +42,4 @@ Once a journey is found, its cards, map, route steps, weather, status and eviden
 
 ## Current handoff
 
-Application changes are developed on `codex/live-integration`. The local app remains at http://127.0.0.1:8000 after the preview is rebuilt and the backend restarted. Deployment remains preparation only.
+Application changes are developed on `codex/live-integration`. The preview has been rebuilt and the backend restarted with the conversational feature at http://127.0.0.1:8000. Deployment remains preparation only.

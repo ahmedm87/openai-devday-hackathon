@@ -1,10 +1,10 @@
 # Integration verification — 1 November 2026
 
-Code verified on `codex/live-integration`, including commit `7268396`. These are checks of the current guided planner; they do not establish a hosted deployment or the optional conversational mode.
+The baseline guided planner was verified on `codex/live-integration`, including commit `7268396`. The conversational feature slice was added in `d2b98df`, with additional coverage described below. No hosted deployment is claimed.
 
 ## Passed
 
-- **12 backend tests**, locally and in CI: nested TfL line identifiers, route geometry conversion, summer-time handling, sample isolation, invalid sample pairs, no-key AI state, partial provider failures, no-route errors, ranking ties, relevant line filtering, the AI request cap, and rejection of unsupported explanation IDs.
+- **20 backend tests locally**: the original 12 baseline checks plus station-name ambiguity, validated clarification choices, missing origins, follow-up preferences, unsupported constraints, bounded model calls, invalid choices and all three preference rankings. The original 12 baseline checks also passed in CI before the feature extension.
 - **Frontend production build**, locally and in [GitHub Actions](https://github.com/ahmedm87/openai-devday-hackathon/actions/runs/41314399045).
 - Dependency consistency check: `pip check` reports no broken requirements.
 - Real station catalogue retrieval: 472 station entries after filtering the TfL response to supported station types.
@@ -33,4 +33,13 @@ The current handoff server was started with a local helper that reuses a recentl
 - Docker/Compose files are prepared but a Docker image build and container rehearsal were not run here.
 - Provider spending controls and a shared limiter for multiple replicas have not been configured. The included request cap is per process.
 - Full mobile-device testing, a signed-out public demo check, the ≤90-second video and final submission remain outstanding.
-- Conversational mode C has not been implemented. Its deployment prerequisite has not been met.
+- Conversational planning is now implemented on the integration branch. Hosting remains preparation only.
+
+## Conversational feature slice
+
+- `POST /api/chat` interprets a request using one bounded `plan_journey` function call and delegates to the existing live planner.
+- Missing endpoints and ambiguous names produce clarification. Explicit candidate choices are validated and do not require another intent-parsing model call.
+- The browser walkthrough of “Waterloo to Bank” returned Bank DLR/Underground choices. Choosing Bank Underground returned real route cards, map geometry, weather and evidence.
+- The form and chat share quickest, less-walking and fewer-change preferences. Follow-ups reuse the active journey endpoints.
+- Unsupported constraints are explicit rather than silently discarded. Model-generated transport prose is not used as a data source.
+- The updated frontend production build passes. Chat history is page-local and the form remains available as a fallback.

@@ -7,7 +7,7 @@ Prepared 1 November 2026, around 13:50 London time. Submission deadline: **17:00
 Ship a complete station-to-station journey with real TfL options, relevant disruption context, endpoint weather, selectable map routes and grounded AI context. Feature C adds a bounded conversational interface on top of the same planner, with station clarification and preference refinements. Current work prioritises these features; hosting remains preparation only.
 
 - Public repository and initial React/MapLibre/FastAPI implementation are on `main`.
-- All 12 backend tests and the frontend production build pass locally and in [integration-branch CI](https://github.com/ahmedm87/openai-devday-hackathon/actions/runs/41314399045).
+- The baseline 12 tests passed in [integration-branch CI](https://github.com/ahmedm87/openai-devday-hackathon/actions/runs/41314399045). With the conversational feature added, all 20 backend tests and the updated frontend production build pass locally.
 - Local credentials have been verified with real TfL, Open-Meteo and OpenAI calls. Secret values remain outside Git.
 - Two real journey pairs and the desktop browser flow have been checked. See the [verification record](VERIFICATION.md) for exact coverage and limitations.
 - Localhost is available for user testing. Deployment files are prepared; the user requested preparation only, so a hosted app and final video remain unfinished. Full mobile-device testing remains outstanding.
