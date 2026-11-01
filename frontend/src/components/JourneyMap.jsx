@@ -14,9 +14,13 @@ function overlayPadding(map) {
   const context = root.querySelector('[data-map-overlay="context"]')?.getBoundingClientRect();
   const results = root.querySelector('[data-map-overlay="results"]')?.getBoundingClientRect();
   const notice = root.querySelector('.global-notice')?.getBoundingClientRect();
+  const fit = root.querySelector('.fit-journey');
+  const zoom = root.querySelector('.maplibregl-ctrl-top-right');
+  const railTop = [fit,zoom].filter(element => element && getComputedStyle(element).visibility !== 'hidden' && getComputedStyle(element).display !== 'none').map(element => element.getBoundingClientRect().top);
   const mobile = rect.width <= 760;
   const top = mobile ? Math.max(search?.bottom || 0, context?.bottom || 0) - rect.top + 60 : Math.max(search?.bottom || rect.top + 90, notice?.bottom || 0) - rect.top + 60;
-  const bottom = results ? rect.bottom - results.top + 24 : 84;
+  const lowerTop = Math.min(results?.top ?? rect.bottom - 60,...railTop);
+  const bottom = rect.bottom - lowerTop + 24;
   const weather = !!root.querySelector('.weather-context');
   return {top, bottom, left: mobile ? weather ? 74 : 50 : weather ? 92 : 60, right: mobile ? weather ? 114 : 86 : Math.min((context?.width || 280) + 44, rect.width * .32)};
 }

@@ -26,6 +26,8 @@ function App() {
   const [weatherVariable, setWeatherVariable] = useState('temperature_c'), [weatherPeriod, setWeatherPeriod] = useState(0), [weatherOpacity, setWeatherOpacity] = useState(.3);
   const [fitToken, setFitToken] = useState(0), [coverageToken, setCoverageToken] = useState(0);
   const chatRef = useRef(null), locked = useRef(false), generation = useRef(0);
+  const contextRef = useRef(activeContextLayer);
+  contextRef.current = activeContextLayer;
   const working = busy || chatBusy;
   const field = useWeatherField(activeContextLayer === 'weather', sample);
 
@@ -62,7 +64,8 @@ function App() {
   function release() {locked.current = false;}
   function acceptJourney(result) {
     setData(result); setSelected(result.recommended_id); setOrigin(result.origin.id); setDestination(result.destination.id); setPreference(result.preference);
-    setError(''); setRefreshFailed(false); setFeature(null); setSearchOpen(false); setRoutesVisible(true); setSheetState('partial');
+    setError(''); setRefreshFailed(false); setFeature(null); setSearchOpen(false); setRoutesVisible(true);
+    setSheetState(window.matchMedia('(max-width:760px)').matches && contextRef.current !== 'none' ? 'collapsed' : 'partial');
     requestAnimationFrame(() => document.querySelector('.search-tabs [aria-selected="true"]')?.focus({preventScroll: true}));
   }
   async function submit(event, refresh = false) {
@@ -81,7 +84,7 @@ function App() {
   }
   function selectRoute(id) {setSelected(id); setFeature(null); setSheetState('partial');}
   function showFeature(feature) {setFeature(feature); setSearchOpen(false); setSheetState('expanded');}
-  function changeContext(value) {setContext(value); setFeature(null);}
+  function changeContext(value) {setContext(value); setFeature(null); if(value !== 'none' && window.matchMedia('(max-width:760px)').matches)setSheetState('collapsed');}
   function escape(event) {
     if (event.key !== 'Escape') return;
     if (searchOpen) {setSearchOpen(false); document.querySelector('.search-tabs [aria-selected="true"]')?.focus();}
@@ -92,7 +95,7 @@ function App() {
   const route = data?.routes.find(item => item.id === selected);
   const warnings = journeyWarnings(data);
 
-  return <MapAppShell sheetState={sheetState} onKeyDown={escape}>
+  return <MapAppShell sheetState={sheetState} searchOpen={searchOpen} onKeyDown={escape}>
     <h1 className="sr-only">Waywise — London journey explorer</h1>
     <JourneyMap {...{data, selectedId: selected, onSelectRoute: selectRoute, routesVisible, activeContextLayer, field, weatherVariable, weatherPeriod, weatherOpacity, fitToken, coverageToken}} onFeature={showFeature}/>
     <header className="app-header"><a className="brand" href="/" aria-label="Waywise home"><span className="brand-mark"><Icon name="arrow"/></span>waywise<span className="brand-period">.</span></a><div className="mode-control" role="group" aria-label="Data mode"><button type="button" aria-pressed={!sample} disabled={working} onClick={() => changeSample(false)}><i/>Live</button><button type="button" aria-pressed={sample} disabled={working} onClick={() => changeSample(true)}>Sample</button></div></header>
@@ -102,8 +105,8 @@ function App() {
     <LayerSwitcher {...{routesVisible, activeContextLayer, field, weatherVariable, weatherPeriod, weatherOpacity, data, route}} onRoutes={() => setRoutesVisible(value => !value)} onContext={changeContext} onVariable={value => {setWeatherVariable(value); setFeature(null);}} onPeriod={value => {setWeatherPeriod(value); setFeature(null);}} onOpacity={setWeatherOpacity} onCoverage={() => setCoverageToken(value => value + 1)}/>
     {(sample || warnings.length > 0 || error) && <aside className="global-notice" role="status" tabIndex={0}>{sample && <strong>Fictional sample · not live travel information.</strong>}{busy && data && <p>Updating · previous journey snapshot remains visible.</p>}{error && <p>{refreshFailed ? 'Refresh failed · previous snapshot retained. ' : ''}{error}</p>}{warnings.map((warning, index) => <p key={index}>{warning}</p>)}</aside>}
     {!data && !working && !selectedFeature && !error && <div className="empty-map-hint"><Icon name="pin"/><div><strong>London, your way.</strong><p>Choose Journey or Ask AI above to compare station-to-station routes.</p></div></div>}
-    <button className="fit-journey" type="button" disabled={!data} onClick={() => {setSearchOpen(false); setFeature(null); setSheetState('partial'); setFitToken(value => value + 1);}}><Icon name="fit"/><span>Fit journey</span></button>
-    <ResultsDock {...{data, route, selectedFeature, field, weatherVariable, weatherPeriod, sheetState, working, busy}} onState={setSheetState} onSelect={selectRoute} onRefresh={() => submit(null, true)} onCloseFeature={() => {selectedFeature?.returnFocus?.(); setFeature(null); if (!data) setSheetState('collapsed');}}/>
+    <button className="fit-journey" type="button" disabled={!data} onClick={() => {setSearchOpen(false); setFeature(null); setSheetState(window.matchMedia('(max-width:760px)').matches ? 'collapsed' : 'partial'); setFitToken(value => value + 1);}}><Icon name="fit"/><span>Fit journey</span></button>
+    <ResultsDock {...{data, route, selectedFeature, field, weatherVariable, weatherPeriod, sheetState, working, busy}} onState={value => {setSheetState(value); if(value === 'expanded')setSearchOpen(false);}} onSelect={selectRoute} onRefresh={() => submit(null, true)} onCloseFeature={() => {selectedFeature?.returnFocus?.(); setFeature(null); if (!data) setSheetState('collapsed');}}/>
     <SnapshotStatus {...{data, sample, working, refreshFailed}}/>
   </MapAppShell>;
 }

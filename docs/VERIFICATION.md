@@ -1,6 +1,6 @@
 # Integration verification — 1 November 2026
 
-The latest map-first checks are in [MAP_FIRST_HANDOFF.md](MAP_FIRST_HANDOFF.md): 27 backend tests, 4 frontend tests, a passing production build, real forecast-field and journey flows, narrow/reduced-height viewports and failure-state checks. The earlier baseline and conversational checks below remain historical evidence.
+The latest map-first checks are in [MAP_FIRST_HANDOFF.md](MAP_FIRST_HANDOFF.md): 27 backend tests, 9 frontend tests, a passing production build, measured overlay spacing, real forecast-field and journey flows, narrow/reduced-height viewports and failure-state checks. The earlier baseline and conversational checks below remain historical evidence.
 
 The baseline guided planner was verified on `codex/live-integration`, including commit `7268396`. The conversational feature slice was added in `d2b98df`, with additional coverage described below. No hosted deployment is claimed.
 

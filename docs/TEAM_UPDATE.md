@@ -7,7 +7,7 @@ Draft to copy into the team's chat; this has not been sent.
 Waywise’s latest work is on **`codex/live-integration`**:
 https://github.com/ahmedm87/openai-devday-hackathon/tree/codex/live-integration
 
-The guided planner and conversational planning work with live TfL, forecasts and evidence-based OpenAI explanations. There are 27 passing backend tests, four passing frontend tests and a passing production build.
+The guided planner and conversational planning work with live TfL, forecasts and evidence-based OpenAI explanations. There are 27 passing backend tests, nine passing frontend tests and a passing production build. Overlay spacing now follows the measured panels, including the compact desktop layout; expanded Details is opaque and clears search.
 
 The new map-first handoff is implemented: a full-screen map, one Journey / Ask AI search surface, searchable London stations and an explicit Summary / Routes / Details sheet. Layers include independent journey visibility, endpoint forecasts, journey-scoped disruptions and a bounded Temperature / Rain chance field. The field has fixed legends, forecast-time/opacity controls and source-value details. Sample mode disables the area field. Selecting another route keeps the explanation tied to the recommended option.
 

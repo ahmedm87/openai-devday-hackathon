@@ -29,7 +29,7 @@ References: [Open-Meteo forecast parameters and intervals](https://open-meteo.co
 
 ## Verification completed
 
-- **27 backend tests** and **4 frontend tests** pass; production build passes. CI now runs the frontend tests too. The existing large-bundle warning remains.
+- **27 backend tests** and **9 frontend tests** pass; production build passes. CI runs the frontend tests too. Five focused layout checks cover compact desktop spacing, actual sheet heights, reduced-height controls, the initial hint and taller context panels. The existing large-bundle warning remains.
 - Real King's Cross → Paddington: station autocomplete, keyboard station selection, Enter submission, automatic panel collapse, returned route selection, endpoint forecasts and evidence inspected.
 - Real Bakerloo service context on an alternative: visible Severe Delays badge, selected-leg corridor, full returned reason and retrieval time. The recommendation stayed attached to Option 1 when Option 3 was selected.
 - Real 25-location Open-Meteo batch normalised successfully. Temperature/Rain chance, forecast-period selection, opacity and coverage controls checked. A selected cell showed the matching zero rain value and requested/returned coordinates.
@@ -39,6 +39,14 @@ References: [Open-Meteo forecast parameters and intervals](https://open-meteo.co
 - Actual 1280×800, 389×844 and 320×844 CSS viewports checked. The 390px target is represented by the adjacent 389px width because the browser's existing zoom rounds integer overrides. A reduced 320×500 viewport checked internal scrolling to Find journey, 16px editable inputs, Escape and bounded page dimensions. Expanded mobile sheet controls clear the search bar.
 
 Local screenshots are in `artifacts/waywise-map-first-2026-11-01/` and a ZIP alongside it. They are sharing artifacts, not committed source. Local preview: http://127.0.0.1:8000/.
+
+## Follow-up: overlapping overlays
+
+Panel spacing is now measured with ResizeObserver rather than fixed sheet-height estimates. Layers starts below the collapsed search/header band. Zoom and Fit journey share a horizontal rail 12px above the actual results dock; a taller desktop context panel can move that rail into the free left slot. Context panels scroll when necessary instead of covering controls. Search and expanded Details temporarily hide competing map controls. Expanded Details starts below search, stays bounded and uses an opaque background. Programmatic focus on its noninteractive heading no longer paints a misleading green box; keyboard focus on buttons remains visible.
+
+On a phone, selecting a context layer or pressing Fit journey collapses the results to make room for the map. Routes reopens comparisons. A new plan also starts collapsed if a context is already active. Context selection remains current if it changes while a request is running.
+
+Browser follow-up at 960×663 confirmed that search, Layers, zoom, Fit journey and the partial dock do not intersect. The taller service panel fits completely with its control rail on the left. Expanded Details starts 12px below search, is opaque white, and hides Layers/zoom/Fit. The 389×844 phone comparison has one canvas, no body overflow and a 12px gap between controls and the dock.
 
 ## Deferred / unverified
 
