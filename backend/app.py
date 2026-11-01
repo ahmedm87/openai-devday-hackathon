@@ -138,7 +138,40 @@ def parse_geometry(value):
         return []
 
 
-def normalize_journey(journey, index):
+def normalize_stops(leg, station_lookup=None):
+    """Preserve TfL's ordered path identifiers; never infer stations from geometry."""
+    station_lookup = station_lookup or {}
+    def point(raw):
+        if not isinstance(raw, dict):
+            return None
+        name = raw.get('commonName') or raw.get('name')
+        if not isinstance(name, str) or not name.strip():
+            return None
+        identifier = raw.get('naptanId') or raw.get('id')
+        identifier = identifier if isinstance(identifier, str) else None
+        known = station_lookup.get(identifier, {})
+        lat, lon = raw.get('lat', known.get('lat')), raw.get('lon', known.get('lon'))
+        valid = all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) for v in (lat, lon))
+        valid = valid and -90 <= lat <= 90 and -180 <= lon <= 180
+        return {'id': identifier, 'name': name.strip(), 'lat': lat if valid else None, 'lon': lon if valid else None}
+    def same(a, b):
+        return (a['id'] == b['id']) if a['id'] and b['id'] else a['name'].casefold() == b['name'].casefold()
+    path = leg.get('path') or {}
+    raw = path.get('stopPoints') if isinstance(path, dict) else None
+    raw_points = raw if isinstance(raw, list) else []
+    stops = []
+    for item in [leg.get('departurePoint'), *raw_points, leg.get('arrivalPoint')]:
+        stop = point(item)
+        if stop:
+            if stops and same(stops[-1], stop):
+                # Arrival/departure objects carry the actual platform coordinates.
+                stops[-1] = {**stops[-1], **{key:value for key,value in stop.items() if value is not None}}
+            else:
+                stops.append(stop)
+    return stops, bool(raw_points) and all(point(item) is not None for item in raw_points)
+
+
+def normalize_journey(journey, index, station_lookup=None):
     def local_timestamp(value):
         if not value:
             return None
@@ -150,6 +183,7 @@ def normalize_journey(journey, index):
     legs = []
     for leg in journey.get('legs', []):
         routes = leg.get('routeOptions', [])
+        stops, stops_available = normalize_stops(leg, station_lookup)
         legs.append({
             'mode': (leg.get('mode') or {}).get('id', 'unknown'),
             'duration': leg.get('duration', 0),
@@ -158,6 +192,7 @@ def normalize_journey(journey, index):
             'instruction': (leg.get('instruction') or {}).get('summary', ''),
             'lines': [{'id': line_id(r), 'name': r.get('name', '')} for r in routes],
             'geometry': parse_geometry((leg.get('path') or {}).get('lineString')),
+            'stops': stops, 'stops_available': stops_available,
             'disruptions': [{'description': d.get('description') or d.get('summary', 'Disruption reported'),
                              'category': d.get('category', '')} for d in leg.get('disruptions', [])],
         })
@@ -283,6 +318,9 @@ async def plan(request: PlanRequest):
         result['preference'] = request.preference
         result['routes'] = rank_routes(result['routes'], request.preference)
         result['recommended_id'] = result['routes'][0]['id']
+        first = result['routes'][0]
+        result['explanation']['summary'] = f"In this fictional example, Option 1 ranks first for {request.preference.replace('_', ' ')}: {first['duration']} minutes, {first['walking_minutes']} reported walking minutes and {first['changes']} changes."
+        result['explanation']['tradeoffs'] = [f"Option {i + 2}: {route['duration']} minutes, {route['walking_minutes']} reported walking minutes and {route['changes']} changes." for i, route in enumerate(result['routes'][1:])]
         return result
     station_data = await stations()
     by_id = {s['id']: s for s in station_data['stations']}
@@ -298,7 +336,7 @@ async def plan(request: PlanRequest):
                                   'date': departure_time.strftime('%Y%m%d'), 'time': departure_time.strftime('%H%M'),
                                   'calcOneDirection': 'true', 'includeAlternativeRoutes': 'true'})
             fetched = now()
-            routes = rank_routes([normalize_journey(j, i) for i, j in enumerate(raw.get('journeys', []))], request.preference)[:3]
+            routes = rank_routes([normalize_journey(j, i, by_id) for i, j in enumerate(raw.get('journeys', []))], request.preference)[:3]
             if not routes or any(not r['legs'] for r in routes):
                 raise ValueError('No routes')
         except (httpx.HTTPError, ValueError, KeyError, TypeError):

@@ -1,7 +1,7 @@
 import React, {useEffect, useLayoutEffect, useRef, useState} from 'react';
 import {overlayLayout} from '../overlayLayout.js';
 
-export default function MapAppShell({sheetState, searchOpen, onKeyDown, children}) {
+export default function MapAppShell({sheetState, searchOpen, decisionOpen, onKeyDown, children}) {
   const [height, setHeight] = useState(null);
   const rootRef = useRef(null);
   useEffect(() => {
@@ -49,5 +49,5 @@ export default function MapAppShell({sheetState, searchOpen, onKeyDown, children
     measure();
     return () => {observer.disconnect();root.removeEventListener('toggle',measure,true);};
   }, [children,height,sheetState,searchOpen]);
-  return <main ref={rootRef} className={`map-app sheet-${sheetState}${searchOpen ? ' search-open' : ''}`} style={height ? {height, '--app-height': `${height}px`} : undefined} onKeyDown={onKeyDown}>{children}</main>;
+  return <main ref={rootRef} className={`map-app sheet-${sheetState}${searchOpen ? ' search-open' : ''}${decisionOpen ? ' decision-open' : ''}`} style={height ? {height, '--app-height': `${height}px`} : undefined} onKeyDown={onKeyDown}>{children}</main>;
 }

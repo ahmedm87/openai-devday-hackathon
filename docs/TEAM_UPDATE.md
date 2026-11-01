@@ -7,7 +7,9 @@ Draft to copy into the team's chat; this has not been sent.
 Waywise’s latest work is on **`codex/live-integration`**:
 https://github.com/ahmedm87/openai-devday-hackathon/tree/codex/live-integration
 
-The guided planner and conversational planning work with live TfL, forecasts and evidence-based OpenAI explanations. There are 27 passing backend tests, nine passing frontend tests and a passing production build. Overlay spacing now follows the measured panels, including the compact desktop layout; expanded Details is opaque and clears search.
+The guided planner and conversational planning work with live TfL, forecasts and evidence-based OpenAI explanations. There are 30 passing backend tests, 14 passing frontend tests and a passing production build. Overlay spacing follows the measured panels; expanded Details is opaque and clears search. Select a route to see its intermediate stations and changes. Try Worth the extra minutes? to preview a route with less reported walking within a 0–15-minute budget.
+
+For the trade-off demo, select Sample, plan the default trip and open Worth the extra minutes? At five minutes it shows the fictional alternative with +4 minutes travelling and −4 reported walking minutes. Reduce the budget to three to see the no-improvement state; increase it to four to restore the alternative. Show this route opens its stops. Live comparisons use only the actual returned routes and destination forecast for the arrival hour.
 
 The new map-first handoff is implemented: a full-screen map, one Journey / Ask AI search surface, searchable London stations and an explicit Summary / Routes / Details sheet. Layers include independent journey visibility, endpoint forecasts, journey-scoped disruptions and a bounded Temperature / Rain chance field. The field has fixed legends, forecast-time/opacity controls and source-value details. Sample mode disables the area field. Selecting another route keeps the explanation tied to the recommended option.
 

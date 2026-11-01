@@ -1,4 +1,5 @@
 import React, {useEffect, useRef, useState} from 'react';
+import {walkingTradeoff} from './walkingTradeoff.js';
 import {createRoot} from 'react-dom/client';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import './style.css';
@@ -23,6 +24,8 @@ function App() {
   const [health, setHealth] = useState(null), [searchMode, setSearchMode] = useState('journey'), [searchOpen, setSearchOpen] = useState(false);
   const [activeContextLayer, setContext] = useState('none'), [routesVisible, setRoutesVisible] = useState(true);
   const [sheetState, setSheetState] = useState('collapsed'), [selectedFeature, setFeature] = useState(null);
+  const [showRouteStops, setShowRouteStops] = useState(false);
+  const [showTradeoff, setShowTradeoff] = useState(false), [walkingBudget, setWalkingBudget] = useState(5);
   const [weatherVariable, setWeatherVariable] = useState('temperature_c'), [weatherPeriod, setWeatherPeriod] = useState(0), [weatherOpacity, setWeatherOpacity] = useState(.3);
   const [fitToken, setFitToken] = useState(0), [coverageToken, setCoverageToken] = useState(0);
   const chatRef = useRef(null), locked = useRef(false), generation = useRef(0);
@@ -55,7 +58,7 @@ function App() {
     return () => controller.abort();
   }, [sample]);
 
-  function clearJourney() {generation.current++; setData(null); setSelected(null); setFeature(null); setSheetState('collapsed'); setError(''); setRefreshFailed(false);}
+  function clearJourney() {generation.current++; setData(null); setSelected(null); setFeature(null); setShowRouteStops(false); setSheetState('collapsed'); setError(''); setRefreshFailed(false);}
   function changeOrigin(value) {setOrigin(value); clearJourney();}
   function changeDestination(value) {setDestination(value); clearJourney();}
   function changePreference(value) {if (value !== preference) {setPreference(value); clearJourney();}}
@@ -63,7 +66,7 @@ function App() {
   function acquire() {if (locked.current) return false; locked.current = true; return true;}
   function release() {locked.current = false;}
   function acceptJourney(result) {
-    setData(result); setSelected(result.recommended_id); setOrigin(result.origin.id); setDestination(result.destination.id); setPreference(result.preference);
+    setData(result); setSelected(result.recommended_id); setShowRouteStops(false); setShowTradeoff(false); setWalkingBudget(5); setOrigin(result.origin.id); setDestination(result.destination.id); setPreference(result.preference);
     setError(''); setRefreshFailed(false); setFeature(null); setSearchOpen(false); setRoutesVisible(true);
     setSheetState(contextRef.current !== 'none' ? 'collapsed' : 'partial');
     requestAnimationFrame(() => document.querySelector('.search-tabs [aria-selected="true"]')?.focus({preventScroll: true}));
@@ -82,7 +85,9 @@ function App() {
     } catch (failure) {if (id === generation.current) {setError(failure.message); setRefreshFailed(refresh); if (!refresh) setSearchOpen(true);}}
     finally {if (id === generation.current) setBusy(false); release();}
   }
-  function selectRoute(id) {setSelected(id); setFeature(null); setSheetState('partial');}
+  function selectRoute(id) {setSelected(id); setFeature(null); setShowTradeoff(false); setShowRouteStops(true); setSheetState('partial');}
+  function previewTradeoff(budget) {setWalkingBudget(budget); const choice=walkingTradeoff(data?.routes,budget); if(choice)setSelected(choice.winner.id);setFeature(null);}
+  function openTradeoff() {setShowTradeoff(true);setShowRouteStops(false);setSheetState('partial');previewTradeoff(walkingBudget);setFitToken(value=>value+1);}
   function showFeature(feature) {setFeature(feature); setSearchOpen(false); setSheetState('expanded');}
   function changeContext(value) {setContext(value); setFeature(null); if(value !== 'none' && window.matchMedia('(max-width:760px)').matches)setSheetState('collapsed');}
   function escape(event) {
@@ -95,7 +100,7 @@ function App() {
   const route = data?.routes.find(item => item.id === selected);
   const warnings = journeyWarnings(data);
 
-  return <MapAppShell sheetState={sheetState} searchOpen={searchOpen} onKeyDown={escape}>
+  return <MapAppShell sheetState={sheetState} searchOpen={searchOpen} decisionOpen={showTradeoff && sheetState==='partial'} onKeyDown={escape}>
     <h1 className="sr-only">Waywise — London journey explorer</h1>
     <JourneyMap {...{data, selectedId: selected, onSelectRoute: selectRoute, routesVisible, activeContextLayer, field, weatherVariable, weatherPeriod, weatherOpacity, fitToken, coverageToken}} onFeature={showFeature}/>
     <header className="app-header"><a className="brand" href="/" aria-label="Waywise home"><span className="brand-mark"><Icon name="arrow"/></span>waywise<span className="brand-period">.</span></a><div className="mode-control" role="group" aria-label="Data mode"><button type="button" aria-pressed={!sample} disabled={working} onClick={() => changeSample(false)}><i/>Live</button><button type="button" aria-pressed={sample} disabled={working} onClick={() => changeSample(true)}>Sample</button></div></header>
@@ -106,7 +111,7 @@ function App() {
     {(sample || warnings.length > 0 || error) && <aside className="global-notice" role="status" tabIndex={0}>{sample && <strong>Fictional sample · not live travel information.</strong>}{busy && data && <p>Updating · previous journey snapshot remains visible.</p>}{error && <p>{refreshFailed ? 'Refresh failed · previous snapshot retained. ' : ''}{error}</p>}{warnings.map((warning, index) => <p key={index}>{warning}</p>)}</aside>}
     {!data && !working && !selectedFeature && !error && <div className="empty-map-hint"><Icon name="pin"/><div><strong>London, your way.</strong><p>Choose Journey or Ask AI above to compare station-to-station routes.</p></div></div>}
     <button className="fit-journey" type="button" disabled={!data} onClick={() => {setSearchOpen(false); setFeature(null); setSheetState(activeContextLayer !== 'none' || window.matchMedia('(max-width:760px)').matches ? 'collapsed' : 'partial'); setFitToken(value => value + 1);}}><Icon name="fit"/><span>Fit journey</span></button>
-    <ResultsDock {...{data, route, selectedFeature, field, weatherVariable, weatherPeriod, sheetState, working, busy}} onState={value => {setSheetState(value); if(value === 'expanded')setSearchOpen(false);}} onSelect={selectRoute} onRefresh={() => submit(null, true)} onCloseFeature={() => {selectedFeature?.returnFocus?.(); setFeature(null); if (!data) setSheetState('collapsed');}}/>
+    <ResultsDock {...{data, route, selectedFeature, field, weatherVariable, weatherPeriod, sheetState, showRouteStops, showTradeoff, walkingBudget, working, busy}} onBudget={previewTradeoff} onTradeoff={openTradeoff} onState={value => {setSheetState(value); if(value === 'partial'){setShowRouteStops(false);setShowTradeoff(false);} if(value === 'expanded')setSearchOpen(false);}} onStops={() => {setShowTradeoff(false);setShowRouteStops(true);setSheetState('partial');}} onSelect={selectRoute} onRefresh={() => submit(null, true)} onCloseFeature={() => {selectedFeature?.returnFocus?.(); setFeature(null); if (!data) setSheetState('collapsed');}}/>
     <SnapshotStatus {...{data, sample, working, refreshFailed}}/>
   </MapAppShell>;
 }

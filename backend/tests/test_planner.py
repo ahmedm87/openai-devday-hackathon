@@ -9,6 +9,31 @@ from backend import app as module
 client = TestClient(module.app)
 
 
+def test_stop_sequence_preserves_intermediates_and_deduplicates_the_arrival():
+    leg = {'departurePoint': {'naptanId':'A','commonName':'Waterloo','lat':51.5,'lon':-.1},
+           'arrivalPoint': {'naptanId':'C','commonName':'Elephant & Castle','lat':51.49,'lon':-.09},
+           'path': {'stopPoints':[{'id':'B','name':'Lambeth North'},{'id':'C','name':'Elephant & Castle'}]}}
+    stops, available = module.normalize_stops(leg, {'B':{'lat':51.495,'lon':-.095}})
+    assert available is True
+    assert [s['name'] for s in stops] == ['Waterloo','Lambeth North','Elephant & Castle']
+    assert stops[1]['lat'] == 51.495
+    assert stops[-1]['lon'] == -.09
+
+
+def test_missing_stop_data_keeps_endpoints_without_inventing_intermediates():
+    stops, available = module.normalize_stops({'departurePoint':{'commonName':'A'},'arrivalPoint':{'commonName':'B'}})
+    assert available is False
+    assert [s['name'] for s in stops] == ['A','B']
+    assert all(s['lat'] is None for s in stops)
+
+
+def test_malformed_stops_do_not_erase_valid_stops_or_collapse_a_loop():
+    stops, available = module.normalize_stops({'departurePoint':{'id':'A','name':'A'},'path':{'stopPoints':[None,{'id':[],'name':'X','lat':float('nan'),'lon':0},{'id':'A','name':'A'}]}})
+    assert available is False
+    assert [s['name'] for s in stops] == ['A','X','A']
+    assert stops[1]['lat'] is None
+
+
 def test_tfl_normalization_extracts_nested_line_and_converts_geometry():
     route = module.normalize_journey({'duration': 12, 'startDateTime': '2026-07-01T13:00:00',
         'arrivalDateTime': '2026-07-01T13:12:00', 'legs': [{'duration': 12, 'mode': {'id': 'tube'},
@@ -115,7 +140,7 @@ def test_ai_can_only_select_evidence_backed_wording():
     assert '70%' in result['summary']
     assert 'no walking is needed' not in result['summary']
     assert any('do not prove' in item for item in result['limitations'])
-    assert any('24 minutes' in item for item in result['tradeoffs'])
+    assert any('16 minutes' in item for item in result['tradeoffs'])
 
 
 def test_unknown_ai_evidence_is_rejected():

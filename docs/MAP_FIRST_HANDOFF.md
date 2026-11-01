@@ -29,7 +29,7 @@ References: [Open-Meteo forecast parameters and intervals](https://open-meteo.co
 
 ## Verification completed
 
-- **27 backend tests** and **9 frontend tests** pass; production build passes. CI runs the frontend tests too. Five focused layout checks cover compact desktop spacing, actual sheet heights, reduced-height controls, the initial hint and taller context panels. The existing large-bundle warning remains.
+- **30 backend tests** and **14 frontend tests** pass; production build passes. CI runs the frontend tests too. Checks cover overlay spacing, ordered stations and changes, time-budget thresholds, missing walking data and destination rain at arrival. The existing large-bundle warning remains.
 - Real King's Cross → Paddington: station autocomplete, keyboard station selection, Enter submission, automatic panel collapse, returned route selection, endpoint forecasts and evidence inspected.
 - Real Bakerloo service context on an alternative: visible Severe Delays badge, selected-leg corridor, full returned reason and retrieval time. The recommendation stayed attached to Option 1 when Option 3 was selected.
 - Real 25-location Open-Meteo batch normalised successfully. Temperature/Rain chance, forecast-period selection, opacity and coverage controls checked. A selected cell showed the matching zero rain value and requested/returned coordinates.
@@ -47,6 +47,14 @@ Panel spacing is now measured with ResizeObserver rather than fixed sheet-height
 On a phone, selecting a context layer or pressing Fit journey collapses the results to make room for the map. At every size, View coverage and fitting with a context active collapse the dock so the overlays leave enough room for the camera fit. Routes reopens comparisons. A new plan also starts collapsed if a context is already active. Context selection remains current if it changes while a request is running.
 
 Browser follow-up at 960×663 confirmed that search, Layers, zoom, Fit journey and the partial dock do not intersect. The taller service panel fits completely with its control rail on the left. Expanded Details starts 12px below search, is opaque white, and hides Layers/zoom/Fit. The 389×844 phone comparison has one canvas, no body overflow and a 12px gap between controls and the dock.
+
+## Selected-route stops and walking trade-off
+
+Selecting a route on its card or the map opens its ordered stop list, with boarding, walking and interchange labels. Routes returns to comparisons; Stops opens the current selection; Details includes the same sequence alongside evidence and notices. TfL `leg.path.stopPoints` is preserved between departure and arrival, deduplicating adjacent endpoint entries. Existing station-catalogue coordinates locate intermediate map points without extra provider calls. Stops without coordinates remain in the list and are omitted from the map. Missing stop lists are labelled; geometry never supplies invented station names. The selected route's map circles distinguish changes and its station labels use collision detection.
+
+Worth the extra minutes? opens from the route comparison. A 0–15-minute slider defaults to five and compares the returned options with the fastest returned route (ties prefer less walking, then fewer changes). Among routes within the budget, it picks the least reported walking, breaking ties by duration and changes. Moving the slider immediately selects that route on the map, without a new request or repeated camera movement. The comparison shows actual duration difference and reported walking saved, or says no returned improvement is available. Show this route opens its stops. The original recommendation/explanation stays separate from this preview.
+
+Destination rain comes from the endpoint forecast hour covering the winner's arrival, retaining zero and explicitly handling unavailable forecasts. The comparison does not claim to search every possible route or measure unreported walking inside stations. The fictional sample now includes a 16-minute alternative to the 12-minute route: four extra minutes and four fewer reported walking minutes. At a three-minute budget it reports no improvement; at four it previews that alternative. Sample weather remains explicitly illustrative.
 
 ## Deferred / unverified
 

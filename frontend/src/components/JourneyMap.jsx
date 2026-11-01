@@ -3,6 +3,7 @@ import maplibregl from 'maplibre-gl';
 import {affectedLeg, weatherFeatures, weatherVariables} from '../mapData.js';
 import {lineColor} from '../ui.jsx';
 import MapLegend from './MapLegend.jsx';
+import {selectedStopFeatures} from '../routeStops.js';
 
 const routeLayers = ['route-selected-transit', 'route-selected-walk', 'route-alternative-transit', 'route-alternative-walk'];
 const empty = () => ({type: 'FeatureCollection', features: []});
@@ -11,9 +12,11 @@ function overlayPadding(map) {
   const root = map.getContainer().closest('.map-app');
   const rect = root.getBoundingClientRect();
   const search = root.querySelector('[data-map-overlay="top"]')?.getBoundingClientRect();
-  const context = root.querySelector('[data-map-overlay="context"]')?.getBoundingClientRect();
+  const contextElement = root.querySelector('[data-map-overlay="context"]');
+  const context = contextElement && getComputedStyle(contextElement).visibility !== 'hidden' ? contextElement.getBoundingClientRect() : null;
   const results = root.querySelector('[data-map-overlay="results"]')?.getBoundingClientRect();
-  const notice = root.querySelector('.global-notice')?.getBoundingClientRect();
+  const noticeElement=root.querySelector('.global-notice');
+  const notice=noticeElement && getComputedStyle(noticeElement).visibility!=='hidden' ? noticeElement.getBoundingClientRect() : null;
   const fit = root.querySelector('.fit-journey');
   const zoom = root.querySelector('.maplibregl-ctrl-top-right');
   const railTop = [fit,zoom].filter(element => element && getComputedStyle(element).visibility !== 'hidden' && getComputedStyle(element).display !== 'none').map(element => element.getBoundingClientRect().top);
@@ -51,7 +54,7 @@ export default function JourneyMap({data, selectedId, onSelectRoute, onFeature, 
       map.on('style.load', () => {setReady(true); setError('');});
       map.on('error', () => setError('Some map data could not load. Journey facts remain available in Details.'));
       const hits = point => {
-        const layers = routeLayers.filter(id => map.getLayer(id));
+        const layers = [...routeLayers,'selected-stops'].filter(id => map.getLayer(id));
         const radius = window.matchMedia('(pointer: coarse)').matches ? 12 : 7;
         return layers.length ? map.queryRenderedFeatures([[point.x - radius, point.y - radius], [point.x + radius, point.y + radius]], {layers}) : [];
       };
@@ -83,6 +86,7 @@ export default function JourneyMap({data, selectedId, onSelectRoute, onFeature, 
     if (!map || !ready) return;
     if (!map.getSource('journeys')) {
       map.addSource('journeys', {type: 'geojson', data: empty()});
+      map.addSource('selected-stops', {type:'geojson',data:empty()});
       const filter = (selected, walking) => ['all', ['==', ['get', 'selected'], selected], [walking ? '==' : '!=', ['get', 'mode'], 'walking']];
       const layout = {'line-cap': 'round', 'line-join': 'round'};
       map.addLayer({id: 'route-alternative-transit', type: 'line', source: 'journeys', filter: filter(false, false), layout, paint: {'line-color': ['get', 'color'], 'line-width': 5, 'line-opacity': .3}});
@@ -107,6 +111,12 @@ export default function JourneyMap({data, selectedId, onSelectRoute, onFeature, 
     map.getSource('journeys').setData({type: 'FeatureCollection', features});
     [...routeLayers, 'route-selected-halo'].forEach(id => map.setLayoutProperty(id, 'visibility', routesVisible ? 'visible' : 'none'));
     map.setLayoutProperty('route-warning', 'visibility', routesVisible && activeContextLayer === 'disruptions' ? 'visible' : 'none');
+    if(!map.getLayer('selected-stops')) {
+      map.addLayer({id:'selected-stops',type:'circle',source:'selected-stops',paint:{'circle-radius':['case',['==',['get','kind'],'change'],7,4],'circle-color':['case',['==',['get','kind'],'change'],'#b9dd9e','#ffffff'],'circle-stroke-color':'#264852','circle-stroke-width':2}});
+      map.addLayer({id:'selected-stop-labels',type:'symbol',source:'selected-stops',layout:{'text-field':['concat',['case',['==',['get','kind'],'change'],'Change · ',''],['get','label']],'text-font':['Noto Sans Regular'],'text-size':11,'text-anchor':'top','text-offset':[0,2.2],'text-max-width':15,'symbol-sort-key':['case',['==',['get','kind'],'change'],0,1]},paint:{'text-color':'#16343e','text-halo-color':'#ffffff','text-halo-width':2}});
+    }
+    const stopData=selectedStopFeatures(routesVisible ? data?.routes.find(item=>item.id===selectedId) : null);
+    map.getSource('selected-stops').setData(stopData);
     if (data && lastPlan.current !== data) {
       const next = new maplibregl.LngLatBounds();
       [...features.flatMap(feature => feature.geometry.coordinates), [data.origin.lon, data.origin.lat], [data.destination.lon, data.destination.lat]].forEach(coordinate => next.extend(coordinate));
