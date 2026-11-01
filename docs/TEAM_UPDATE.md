@@ -1,30 +1,25 @@
 # Suggested teammate post
 
-Draft to copy into the team's existing chat. This has not been sent.
+Draft to copy into the team's chat; this has not been sent.
 
 ---
 
-Quick Waywise update: the code is on public `main`:
-https://github.com/ahmedm87/openai-devday-hackathon
+Waywise’s latest work is on **`codex/live-integration`**:
+https://github.com/ahmedm87/openai-devday-hackathon/tree/codex/live-integration
 
-The nine backend tests and frontend production build pass in CI. We still need to verify the complete live journey, test the browser flow and deploy. A local `.env` has been added, but API access is not yet verified; please keep keys out of chat and Git.
+The guided planner and conversational planning are working with live TfL, endpoint forecasts and evidence-based OpenAI explanations. There are 20 passing backend tests and a passing frontend production build.
 
-We're building **A first: a guided station-to-station planner**. Chat mode C is a stretch goal only after A works publicly.
+The frontend feedback is implemented: compact desktop sidebar/sticky map, mobile ordering, collapsed conversation history with a visible composer, numbered route cards, the recommendation directly below its own option, muted alternatives, dashed walking, endpoint forecasts and selected-route service context. Selecting another map route keeps the recommendation attached to the original numbered option.
 
-Suggested split:
-- **Ahmed + Codex:** live TfL/weather/OpenAI integration and backend fixes.
-- **You:** run the UI, check route/map selection on desktop and mobile, and prepare deployment. Let's agree the hosting account first.
+Please pull the integration branch, rebuild the frontend and restart FastAPI using the README. Keep keys in your ignored local `.env`.
 
-Please pull current `main` and use a separate feature branch. Setup is in the README. Let's coordinate before changing the API contract or editing the same file.
+Suggested review:
 
-Checkpoints today, London time:
-- **14:30:** show one real journey end to end and share blockers/PRs.
-- **15:15:** A should be deployed; decide whether chat is still realistic.
-- **16:00:** feature freeze; finish the ≤90-second demo and README links.
-- **16:30:** final signed-out link checks and submission preparation.
-- **17:00:** submission deadline; aim to submit earlier.
+1. Plan a live journey with the station fields, select another card/path and inspect status, forecast timestamps and source details.
+2. Ask “Waterloo to Bank”, choose Bank Underground, then ask “Same journey with fewer changes”. Confirm selectors, preference, cards and map stay in sync.
+3. Check the interface on your phone, particularly forecast details, touch targets, conversation choices and long station names. Physical touch-device and screen-reader checks are still outstanding.
+4. Review the explicitly labelled sample separately from live results. Screenshots and the latest verification notes are described in `docs/FRONTEND_FEEDBACK.md`.
 
-The detailed plan and acceptance checklist are here:
-https://github.com/ahmedm87/openai-devday-hackathon/blob/main/docs/BUILD_PLAN.md
+Please use a separate feature branch and coordinate before changing API contracts or the same frontend files. Hosting remains **deployment files only**; no hosted app or main merge has been performed for this update.
 
-First action: get your local UI running from the README and confirm whether you can take the UI/deployment track. Flag setup or hosting blockers immediately. Sample mode is available for interface checks, but we'll clearly label it as fictional and demonstrate real data once verified.
+Next shared milestone: finish the colleague review and demo recording, then agree any hosting/submission work before the 17:00 London deadline.

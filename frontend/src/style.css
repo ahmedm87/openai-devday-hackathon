@@ -797,6 +797,43 @@ button,select,input {
   font-size:11px;
   margin-top:7px;
 }
+.mobile-forecast {
+  margin-top:12px;
+  padding:14px 16px;
+  border:1px solid #bdcebb;
+  border-radius:12px;
+  background:#fff;
+  font-size:12px;
+}
+.mobile-forecast-heading {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+}
+.mobile-forecast h3 {
+  font-size:13px;
+}
+.mobile-forecast-heading button {
+  min-width:44px;
+  min-height:44px;
+  border:0;
+  border-radius:8px;
+  background:#f1f4ed;
+  font-size:22px;
+}
+.mobile-forecast p {
+  margin-top:7px;
+}
+.mobile-forecast .forecast-hour {
+  font-weight:600;
+}
+.mobile-forecast small {
+  display:block;
+  margin-top:8px;
+  color:var(--muted);
+  font-size:10px;
+}
 .maplibregl-popup-content {
   padding:16px;
   border-radius:12px;

@@ -30,11 +30,12 @@ function ServiceContext({data, route}) {
   if (!data || !route) return null;
   const walking = route.legs.every(leg => leg.mode === 'walking');
   const statuses = route.line_statuses || [];
+  const descriptions = [...new Set(statuses.flatMap(line => line.statuses.map(status => status.description)))];
   const retrieved = data.sources.find(source => source.name === 'TfL line status')?.retrieved_at;
   return <details className="map-service" key={`${data.generated_at || 'sample'}-${route.id}`}>
-    <summary><Icon name="train"/><span>Selected-route status<small>{data.sample ? 'Sample · not checked' : walking ? 'Walking route' : statuses.length ? `${statuses.length} line(s)` : 'Status unavailable'}</small></span><Icon name="chevron"/></summary>
+    <summary><Icon name="train"/><span>Selected-route status<small>{data.sample ? 'Sample · not checked' : walking ? 'Walking route' : descriptions.join(' · ') || 'Status unavailable'}</small></span><Icon name="chevron"/></summary>
     <div className="map-service-content">
-      <p className="context-time">{data.sample ? 'Fictional sample · no service check' : `Retrieved ${londonTime(retrieved)} · London time`}</p>
+      <p className="context-time">{data.sample ? 'Fictional sample · no service check' : retrieved ? `Retrieved ${londonTime(retrieved)} · London time` : 'Retrieval time unavailable'}</p>
       {walking ? <p>No public transport line status applies to this walking option.</p> : statuses.length ? statuses.map(line => <div className="status-line" key={line.id}><strong>{line.name}</strong><div className="status-labels">{line.statuses.map((status, index) => <span key={index}>{status.description}</span>)}</div>{[...new Set(line.statuses.map(status => status.reason).filter(Boolean))].map((reason, index) => <p key={index}>{reason}</p>)}</div>) : <p>No line status was returned for this route.</p>}
       {route.legs.flatMap(leg => leg.disruptions).map((notice, index) => <p key={index}>{notice.description}</p>)}
       <p className="essential-uncertainty">Line-wide reports do not measure this journey’s delay.</p>
@@ -46,8 +47,17 @@ export default function JourneyMap({data, selectedId, onSelectRoute, onRefresh, 
   const container = useRef(null), mapRef = useRef(null), selectionRef = useRef(onSelectRoute);
   const boundsRef = useRef(null), lastFit = useRef(null);
   const [ready, setReady] = useState(false), [mapError, setMapError] = useState('');
+  const [forecast, setForecast] = useState(null);
+  const forecastPanel = useRef(null);
   const route = data?.routes.find(item => item.id === selectedId);
   selectionRef.current = onSelectRoute;
+
+  useEffect(() => {
+    if (!forecast) return;
+    forecast.button.setAttribute('aria-expanded', 'true');
+    forecastPanel.current?.focus();
+    return () => forecast.button.setAttribute('aria-expanded', 'false');
+  }, [forecast]);
 
   useEffect(() => {
     let map;
@@ -59,7 +69,10 @@ export default function JourneyMap({data, selectedId, onSelectRoute, onRefresh, 
       map.on('error', () => setMapError('Some map data could not load. Route facts remain available in the sidebar.'));
       const hits = point => {
         const layers = clickableLayers.filter(id => map.getLayer(id));
-        return layers.length ? map.queryRenderedFeatures(point, {layers}) : [];
+        // Keep thin and dashed paths usable without making the visible lines heavier.
+        const radius = window.matchMedia('(pointer: coarse)').matches ? 12 : 6;
+        const area = [[point.x - radius, point.y - radius], [point.x + radius, point.y + radius]];
+        return layers.length ? map.queryRenderedFeatures(area, {layers}) : [];
       };
       map.on('click', event => {
         const id = hits(event.point)[0]?.properties?.route_id;
@@ -106,7 +119,9 @@ export default function JourneyMap({data, selectedId, onSelectRoute, onRefresh, 
 
   useEffect(() => {
     const map = mapRef.current;
+    setForecast(null);
     if (!map || !ready || !data) return;
+    const mobile = window.matchMedia('(max-width: 760px)');
     const markers = [data.origin, data.destination].map((station, index) => {
       const role = index ? 'destination' : 'origin';
       const weather = data.weather.find(item => item.location === station.name) || (data.sample ? data.weather[0] : null);
@@ -131,12 +146,19 @@ export default function JourneyMap({data, selectedId, onSelectRoute, onRefresh, 
       // Native button activation handles Enter/Space once, as well as pointer clicks.
       button.addEventListener('click', event => {
         event.stopPropagation();
+        if (mobile.matches) {
+          popup.remove();
+          setForecast({station, weather, role, button});
+          return;
+        }
         if (popup.isOpen()) popup.remove(); else popup.addTo(map);
       });
       const marker = new maplibregl.Marker({element: button, anchor: 'bottom'}).setLngLat(coordinates).addTo(map);
       return {marker, popup};
     });
-    return () => markers.forEach(({marker, popup}) => {popup.remove(); marker.remove();});
+    const closeForecast = () => {setForecast(null); markers.forEach(({popup}) => popup.remove());};
+    mobile.addEventListener('change', closeForecast);
+    return () => {mobile.removeEventListener('change', closeForecast); markers.forEach(({marker, popup}) => {popup.remove(); marker.remove();});};
   }, [data, ready]);
 
   const journeysAt = data?.sources.find(source => source.name === 'TfL journeys')?.retrieved_at;
@@ -149,7 +171,12 @@ export default function JourneyMap({data, selectedId, onSelectRoute, onRefresh, 
   return <section className="map-panel" aria-label="Journey map and context">
     <div className="map-panel-heading"><div><h2>Journey map</h2><p>{data ? data.sample ? 'Fictional sample · schematic paths' : `TfL journeys retrieved ${londonTime(journeysAt)} · London time` : 'Compare the ways across London'}</p></div>{data && <button className="refresh-button" type="button" disabled={working} onClick={onRefresh} aria-label="Refresh search"><Icon name="refresh"/><span>{working ? 'Updating…' : 'Refresh'}</span></button>}</div>
     <div className="map-frame"><div ref={container} className="map-canvas" aria-label="Map showing returned journey options"/><ServiceContext data={data} route={route}/>{mapError && <p className="map-error" role="status">{mapError}</p>}</div>
+    {forecast && data && <section className="mobile-forecast" ref={forecastPanel} role="dialog" aria-label={`Forecast near ${forecast.role}`} tabIndex={-1}>
+      <div className="mobile-forecast-heading"><h3>{data.sample ? 'Sample forecast' : 'Forecast'} near {forecast.role}</h3><button type="button" aria-label="Close forecast details" onClick={() => {forecast.button.focus(); setForecast(null);}}>×</button></div>
+      <p>{forecast.station.name}</p>
+      {forecast.weather?.hours?.[0] ? <><p className="forecast-hour">Forecast hour {londonTime(forecast.weather.hours[0].time)} · London time</p><p>{data.sample ? 'Fictional sample · not retrieved' : `Retrieved ${londonTime(forecast.weather.retrieved_at)} · London time`}</p><p>{forecast.weather.hours[0].temperature_c ?? '—'}°C · {forecast.weather.hours[0].rain_probability ?? '—'}% rain probability · {forecast.weather.hours[0].wind_kmh ?? '—'} km/h wind</p><small>{forecast.weather.source}</small></> : <p>Endpoint forecast unavailable.</p>}
+    </section>}
     <div className="map-legend" aria-label="Route map legend"><span><i className="legend-selected"/>Selected</span><span><i className="legend-alternative"/>Alternatives · click to select</span><span><i className="legend-walking"/>Walking</span></div>
-    {data && <><p className="map-forecast-note">A / B: forecast near origin / destination. Select a marker for its forecast hour and source.</p><div className="map-source-times"><span>{data.sample ? 'Synthetic example · not live' : `Endpoint forecasts retrieved ${londonTime(weatherAt)}`}</span><span>Retrieved snapshots · refresh for updates</span></div>{(warnings.length > 0 || missingGeometry) && <div className="map-warnings" role="status">{missingGeometry && <p>Some route sections have no geometry and are not drawn.</p>}{warnings.map((warning, index) => <p key={index}>{warning}</p>)}</div>}</>}
+    {data && <><p className="map-forecast-note">A / B: forecast near origin / destination. Select a marker for its forecast hour and source.</p><div className="map-source-times"><span>{data.sample ? 'Synthetic example · not live' : weatherAt ? `Endpoint forecasts retrieved ${londonTime(weatherAt)}` : 'Endpoint forecasts unavailable'}</span><span>Retrieved snapshots · refresh for updates</span></div>{(warnings.length > 0 || missingGeometry) && <div className="map-warnings" role="status">{missingGeometry && <p>Some route sections have no geometry and are not drawn.</p>}{warnings.map((warning, index) => <p key={index}>{warning}</p>)}</div>}</>}
   </section>;
 }

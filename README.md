@@ -74,7 +74,7 @@ docker build -t waywise .
 docker run --rm -p 8000:8000 --env-file .env waywise
 ```
 
-Production accepts the host's `PORT` variable. Configure runtime secrets through the host. A hosted demo and live OpenAI verification still require setup. Before exposing billable AI calls on an unrestricted public deployment, add request limits and configure a project spending budget.
+Production accepts the host's `PORT` variable. Configure runtime secrets through the host. Live provider integrations have been verified locally; a hosted demo still requires setup. Configure provider spending controls before exposing billable AI calls publicly, and use a shared limiter before scaling to multiple replicas.
 
 ## Data and limitations
 
@@ -96,4 +96,6 @@ Application code was created during the hackathon with Codex assistance, followi
 
 See the [two-person build plan and demo outline](docs/BUILD_PLAN.md) and [contribution guide](CONTRIBUTING.md). Work on feature branches and pull current `main` before starting. The conversational feature is on the integration branch alongside the guided planner.
 
-Submission still needs a deployed URL, real OpenAI verification, and a demo video of no more than 90 seconds.
+The [frontend feedback handoff](docs/FRONTEND_FEEDBACK.md) describes the latest workspace, mobile, map and chat changes and the checks performed.
+
+Submission still needs a deployed URL, a signed-out hosted walkthrough and a demo video of no more than 90 seconds.

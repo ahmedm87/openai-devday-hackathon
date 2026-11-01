@@ -12,7 +12,7 @@ The baseline guided planner was verified on `codex/live-integration`, including 
 - Manual review of the updated AI output: the model selects evidence IDs and the backend supplies factual wording. Forecast probabilities are not rewritten as clear skies; line status is not rewritten as a guaranteed journey delay; zero walking-leg minutes are not presented as proof of no walking inside stations.
 - Desktop browser: live station selections, journey submission, returned cards, map geometry, alternative-route selection, corresponding journey steps, weather/status context and source timestamps were inspected.
 - Sample browser flow: fictional labelling, three route cards and alternative selection were inspected. Map attribution is visible.
-- A narrow-layout check had no observed horizontal document overflow at the browser's reported 520px viewport. The requested 390px override did not produce a 390px viewport, so **390px/mobile-device validation is not claimed**. The viewport override was reset afterward.
+- The earlier narrow-layout check at 520px is superseded by the frontend feedback checks: actual 1280×800 desktop and 320×844 / 389×844 / 391×844 narrow CSS viewports were inspected. There was no horizontal document overflow. Physical mobile-device validation is not claimed. See [frontend feedback handoff](FRONTEND_FEEDBACK.md) for the updated layout, map, chat and failure-state checks.
 
 ## Issues found and addressed
 
