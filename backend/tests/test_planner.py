@@ -78,3 +78,21 @@ def test_rank_tiebreaker_and_relevant_statuses():
     b = {'id':'b','duration':12,'changes':0,'walking_minutes':4,'legs':[]}
     assert module.rank_routes([a,b])[0]['id'] == 'b'
     assert module.relevant_statuses(a,[{'id':'jubilee'},{'id':'central'}]) == [{'id':'jubilee'}]
+
+
+def test_forecast_window_converts_london_summer_time(monkeypatch):
+    monkeypatch.setattr(module, 'get_json', AsyncMock(return_value={'hourly': {
+        'time': ['2026-07-01T11:00', '2026-07-01T12:00', '2026-07-01T13:00'],
+        'temperature_2m': [18, 19, 20], 'precipitation_probability': [10, 20, 30],
+        'wind_speed_10m': [5, 6, 7]}}))
+    result = asyncio.run(module.weather_at(None, {'name': 'A', 'lat': 51.5, 'lon': -0.1},
+                                          '2026-07-01T13:10:00', '2026-07-01T13:40:00'))
+    assert len(result['hours']) == 1
+    assert result['hours'][0]['time'] == '2026-07-01T12:00:00+00:00'
+    assert result['hours'][0]['rain_probability'] == 20
+
+
+def test_geometry_rejects_invalid_or_missing_values():
+    assert module.parse_geometry(None) == []
+    assert module.parse_geometry('broken json') == []
+    assert module.parse_geometry('[[500,0],[51.5,-0.1]]') == [[-0.1, 51.5]]
