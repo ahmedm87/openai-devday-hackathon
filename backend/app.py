@@ -4,6 +4,7 @@ import json
 import math
 import os
 import time
+from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -19,6 +20,22 @@ load_dotenv(ROOT / '.env')
 app = FastAPI(title='Waywise — London Transport Intelligence', version='0.1.0')
 TFL = 'https://api.tfl.gov.uk'
 station_cache = {'expires': 0, 'stations': []}
+ai_call_times = deque()
+
+
+def reserve_ai_call():
+    """Bound billable calls across all demo visitors in this single process."""
+    try:
+        limit = max(0, min(100, int(os.getenv('AI_REQUESTS_PER_MINUTE', '10'))))
+    except ValueError:
+        limit = 10
+    timestamp = time.monotonic()
+    while ai_call_times and ai_call_times[0] <= timestamp - 60:
+        ai_call_times.popleft()
+    if len(ai_call_times) >= limit:
+        return False
+    ai_call_times.append(timestamp)
+    return True
 
 
 def now():
@@ -168,6 +185,8 @@ async def weather_at(client, station, start, end):
 async def explain(payload):
     if not os.getenv('OPENAI_API_KEY'):
         return {'status': 'not_configured', 'summary': 'AI explanation is unavailable until an OpenAI API key is configured.', 'tradeoffs': [], 'limitations': []}
+    if not reserve_ai_call():
+        return {'status': 'rate_limited', 'summary': 'The demo AI request limit has been reached. Please try again in a minute. Retrieved route facts remain available.', 'tradeoffs': [], 'limitations': []}
     from openai import AsyncOpenAI
     # Exclude geometry and names of individual stops: the model only needs compact route evidence.
     evidence = {key: payload[key] for key in ('recommended_id', 'ranking_rule', 'weather', 'warnings', 'sources')}

@@ -96,3 +96,11 @@ def test_geometry_rejects_invalid_or_missing_values():
     assert module.parse_geometry(None) == []
     assert module.parse_geometry('broken json') == []
     assert module.parse_geometry('[[500,0],[51.5,-0.1]]') == [[-0.1, 51.5]]
+
+
+def test_ai_request_cap_preserves_routes_without_calling_provider(monkeypatch):
+    monkeypatch.setenv('OPENAI_API_KEY', 'test-placeholder')
+    monkeypatch.setenv('AI_REQUESTS_PER_MINUTE', '0')
+    result = asyncio.run(module.explain({}))
+    assert result['status'] == 'rate_limited'
+    assert 'route facts remain available' in result['summary']
