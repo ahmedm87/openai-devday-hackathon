@@ -1,25 +1,15 @@
-import React, {Fragment, useEffect, useState} from 'react';
+import React, {useEffect, useRef, useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import './style.css';
 import './chat.css';
-import JourneyChat from './JourneyChat.jsx';
-import JourneyControls from './components/JourneyControls.jsx';
+import SearchDock from './components/SearchDock.jsx';
 import JourneyMap from './components/JourneyMap.jsx';
-import RouteCard from './components/RouteCard.jsx';
-import Recommendation from './components/Recommendation.jsx';
-import {Icon, lineColor, londonTime} from './ui.jsx';
-
-function Evidence({data, route, optionNumber}) {
-  return <details className="evidence-panel panel">
-    <summary><span>Selected Option {optionNumber}: steps & evidence</span><Icon name="chevron"/></summary>
-    <div className="evidence-content">
-      <section><h2>Journey steps</h2><ol className="journey-steps">{route.legs.map((leg, index) => <li key={index}><span className="leg-marker" style={{'--line-color': lineColor(leg.mode === 'walking' ? 'walking' : leg.lines[0]?.name)}}>{index + 1}</span><div><strong>{leg.from} → {leg.to}</strong><p>{leg.instruction}</p><small>{leg.duration} min · {leg.mode.replaceAll('-', ' ')}</small></div></li>)}</ol></section>
-      <section><h2>Endpoint forecasts</h2><p className="evidence-note">Forecasts describe conditions near the endpoints, not along the whole route. Times below are London time.</p><div className="weather-evidence">{data.weather.length ? data.weather.map((weather, index) => <article key={index}><h3><Icon name="rain"/>{weather.location}</h3>{weather.hours.map((hour, hourIndex) => <p key={hourIndex}><time dateTime={hour.time}>{londonTime(hour.time)}</time> · {hour.temperature_c ?? '—'}°C · {hour.rain_probability ?? '—'}% rain probability · {hour.wind_kmh ?? '—'} km/h wind</p>)}<small>{data.sample ? 'Fictional sample · not retrieved' : `Retrieved ${londonTime(weather.retrieved_at)}`} · {weather.source}</small></article>) : <p>No endpoint forecast was returned.</p>}</div></section>
-      <section><h2>Sources & snapshot times</h2><ul className="source-list">{data.sources.map((source, index) => <li key={index}><strong>{source.name}</strong><span>{data.sample ? 'Fictional sample' : source.retrieved_at ? `Retrieved ${londonTime(source.retrieved_at)} London time` : 'Retrieval time unavailable'}</span><small>{source.provider_updated_at ? `Provider updated ${londonTime(source.provider_updated_at)}` : 'Provider update time unavailable'}</small></li>)}</ul><p className="evidence-note">{data.ranking_rule}</p><p className="evidence-note">These are retrieved snapshots. Use Refresh to request updated journey options.</p></section>
-    </div>
-  </details>;
-}
+import LayerSwitcher from './components/LayerSwitcher.jsx';
+import ResultsDock from './components/ResultsDock.jsx';
+import useWeatherField from './hooks/useWeatherField.js';
+import {journeyWarnings} from './mapData.js';
+import {Icon, londonTime} from './ui.jsx';
 
 function App() {
   const [sample, setSample] = useState(false), [stations, setStations] = useState([]);
@@ -27,68 +17,99 @@ function App() {
   const [preference, setPreference] = useState('fastest');
   const [data, setData] = useState(null), [selected, setSelected] = useState(null);
   const [busy, setBusy] = useState(false), [chatBusy, setChatBusy] = useState(false);
-  const [stationBusy, setStationBusy] = useState(true), [error, setError] = useState('');
-  const [health, setHealth] = useState(null);
+  const [stationBusy, setStationBusy] = useState(true), [error, setError] = useState(''), [refreshFailed, setRefreshFailed] = useState(false);
+  const [health, setHealth] = useState(null), [searchMode, setSearchMode] = useState('journey'), [searchOpen, setSearchOpen] = useState(false);
+  const [activeContextLayer, setContext] = useState('none'), [routesVisible, setRoutesVisible] = useState(true);
+  const [sheetState, setSheetState] = useState('collapsed'), [selectedFeature, setFeature] = useState(null);
+  const [weatherVariable, setWeatherVariable] = useState('temperature_c'), [weatherPeriod, setWeatherPeriod] = useState(0), [weatherOpacity, setWeatherOpacity] = useState(.3);
+  const [fitToken, setFitToken] = useState(0), [coverageToken, setCoverageToken] = useState(0), [visualHeight, setVisualHeight] = useState(null);
+  const chatRef = useRef(null), locked = useRef(false), generation = useRef(0);
   const working = busy || chatBusy;
+  const field = useWeatherField(activeContextLayer === 'weather', sample);
+
+  useEffect(() => {
+    const available = field.data?.available_variables;
+    if (available?.length && !available.includes(weatherVariable)) setWeatherVariable(available[0]);
+  }, [field.data, weatherVariable]);
 
   useEffect(() => {fetch('/api/health').then(response => response.json()).then(setHealth).catch(() => {});}, []);
   useEffect(() => {
-    let cancelled = false;
-    setStationBusy(true); setData(null); setSelected(null); setError(''); setStations([]); setOrigin(''); setDestination('');
+    const viewport = window.visualViewport;
+    const update = () => setVisualHeight(viewport?.height || window.innerHeight);
+    update(); viewport?.addEventListener('resize', update);
+    return () => viewport?.removeEventListener('resize', update);
+  }, []);
+  useEffect(() => {
+    const controller = new AbortController();
+    clearJourney(); setStations([]); setOrigin(''); setDestination(''); setStationBusy(true);
     (async () => {
       try {
-        const response = await fetch(`/api/stations?sample=${sample}`);
+        const response = await fetch(`/api/stations?sample=${sample}`, {signal: controller.signal});
         const result = await response.json();
-        if (!response.ok) throw new Error(typeof result.detail === 'string' ? result.detail : 'Station search is unavailable. Try again shortly.');
-        if (cancelled) return;
+        if (!response.ok) throw new Error(typeof result.detail === 'string' ? result.detail : 'Station search is unavailable.');
+        if (controller.signal.aborted) return;
         setStations(result.stations);
         setOrigin(result.stations.find(station => station.name.startsWith('Waterloo'))?.id || '');
-        setDestination(result.stations.find(station => station.name.startsWith('Bank'))?.id || '');
-      } catch (failure) {if (!cancelled) setError(failure.message);}
-      finally {if (!cancelled) setStationBusy(false);}
+        setDestination((result.stations.find(station => station.name === 'Bank Underground Station') || result.stations.find(station => station.name.startsWith('Bank')))?.id || '');
+      } catch (failure) {if (!controller.signal.aborted) {setError(failure.message); setSearchOpen(true);}}
+      finally {if (!controller.signal.aborted) setStationBusy(false);}
     })();
-    return () => {cancelled = true;};
+    return () => controller.abort();
   }, [sample]);
 
-  function clearJourney() {setData(null); setSelected(null); setError('');}
+  function clearJourney() {generation.current++; setData(null); setSelected(null); setFeature(null); setSheetState('collapsed'); setError(''); setRefreshFailed(false);}
   function changeOrigin(value) {setOrigin(value); clearJourney();}
   function changeDestination(value) {setDestination(value); clearJourney();}
   function changePreference(value) {if (value !== preference) {setPreference(value); clearJourney();}}
-  function changeSample(value) {if (!working) setSample(value);}
-  async function submit(event) {
+  function changeSample(value) {if (!locked.current) {setSample(value); setFeature(null);}}
+  function acquire() {if (locked.current) return false; locked.current = true; return true;}
+  function release() {locked.current = false;}
+  function acceptJourney(result) {
+    setData(result); setSelected(result.recommended_id); setOrigin(result.origin.id); setDestination(result.destination.id); setPreference(result.preference);
+    setError(''); setRefreshFailed(false); setFeature(null); setSearchOpen(false); setRoutesVisible(true); setSheetState('partial');
+  }
+  async function submit(event, refresh = false) {
     event?.preventDefault();
-    if (working || stationBusy || !origin || !destination) return;
-    setBusy(true); clearJourney();
+    if (stationBusy || !origin || !destination || !acquire()) return;
+    const id = ++generation.current;
+    setBusy(true); setError(''); setRefreshFailed(false); setFeature(null);
+    if (!refresh) {setData(null); setSelected(null);}
     try {
       const response = await fetch('/api/plan', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({origin, destination, sample, preference})});
       const result = await response.json();
-      if (!response.ok) throw new Error(typeof result.detail === 'string' ? result.detail : 'Journey planning is unavailable. Try again shortly.');
-      setData(result); setSelected(result.recommended_id);
-    } catch (failure) {setError(failure.message);}
-    finally {setBusy(false);}
+      if (!response.ok) throw new Error(typeof result.detail === 'string' ? result.detail : 'Journey planning is unavailable.');
+      if (id === generation.current) acceptJourney(result);
+    } catch (failure) {if (id === generation.current) {setError(failure.message); setRefreshFailed(refresh); if (!refresh) setSearchOpen(true);}}
+    finally {if (id === generation.current) setBusy(false); release();}
   }
-  function acceptChatJourney(result) {
-    setData(result); setSelected(result.recommended_id); setOrigin(result.origin.id); setDestination(result.destination.id); setPreference(result.preference); setError('');
+  function selectRoute(id) {setSelected(id); setFeature(null); setSheetState('partial');}
+  function showFeature(feature) {setFeature(feature); setSearchOpen(false); setSheetState('expanded');}
+  function changeContext(value) {setContext(value); setFeature(null);}
+  function escape(event) {
+    if (event.key !== 'Escape') return;
+    if (searchOpen) {setSearchOpen(false); document.querySelector('.search-trigger, #map-question')?.focus();}
+    else if (document.querySelector('.weather-settings[open]')) document.querySelector('.weather-settings[open]').open = false;
+    else if (selectedFeature || sheetState === 'expanded') {setFeature(null); setSheetState(data ? 'partial' : 'collapsed');}
+    else if (sheetState === 'partial') setSheetState('collapsed');
   }
   const route = data?.routes.find(item => item.id === selected);
-  const optionNumber = data?.routes.findIndex(item => item.id === selected) + 1;
+  const warnings = journeyWarnings(data);
+  const retrieved = data?.sources.find(source => source.name === 'TfL journeys')?.retrieved_at;
 
-  return <>
-    <header className="topbar"><a className="brand" href="/" aria-label="Waywise home"><span className="brand-mark"><Icon name="arrow"/></span>waywise<span className="brand-period">.</span></a><span className="header-context">London Transport Intelligence</span><div className="mode-control" role="group" aria-label="Data mode"><button type="button" aria-pressed={!sample} disabled={working} onClick={() => changeSample(false)}><i/>Live</button><button type="button" aria-pressed={sample} disabled={working} onClick={() => changeSample(true)}>Sample</button></div></header>
-    <main className="app-shell">
-      <div className="workspace-intro"><div><h1>A clearer way across London.</h1><p>Compare routes, check the context, choose your way.</p></div><span className="leave-now"><Icon name="clock"/>Leave now · London time</span></div>
-      <div className="workspace">
-        <JourneyControls {...{stations, origin, destination, preference, sample, stationBusy, working, busy, error}} onOrigin={changeOrigin} onDestination={changeDestination} onPreference={changePreference} onSwap={() => {setOrigin(destination); setDestination(origin); clearJourney();}} onSubmit={submit} onSample={changeSample}/>
-        <JourneyMap data={data} selectedId={selected} onSelectRoute={setSelected} onRefresh={submit} working={working}/>
-        <JourneyChat journey={data} onJourney={acceptChatJourney} busy={chatBusy} onBusyChange={setChatBusy} disabled={busy || stationBusy} sample={sample} onLive={() => changeSample(false)} aiConfigured={health?.openai_configured}/>
-        <section className="route-results" aria-label="Journey options" aria-busy={busy}>
-          {data ? <><div className="results-heading"><h2>Your options</h2><span aria-live="polite">{data.routes.length} route{data.routes.length === 1 ? '' : 's'} · {data.sample ? 'sample' : 'TfL'}</span></div><p className="journey-label">{data.origin.name} <span>→</span> {data.destination.name}</p>{data.routes.map((item, index) => <Fragment key={item.id}><RouteCard route={item} number={index + 1} selected={selected === item.id} recommended={data.recommended_id === item.id} preference={data.preference} disabled={working} onSelect={setSelected}/>{data.recommended_id === item.id && <Recommendation data={data} number={index + 1}/>}</Fragment>)}</> : <div className="empty-state panel"><span className="empty-icon"><Icon name={busy ? 'clock' : 'train'}/></span><h2>{busy ? 'Finding your options…' : 'Your journey starts here.'}</h2><p>{busy ? 'Retrieving route options, service context and endpoint forecasts.' : 'Use the station fields or ask in chat.'}</p>{!busy && <ol><li><span className="empty-number">01</span><span>Choose your stations.</span></li><li><span className="empty-number">02</span><span>Compare the returned options.</span></li><li><span className="empty-number">03</span><span>Select a route to view on the map.</span></li></ol>}</div>}
-        </section>
-      </div>
-      {data && route && <Evidence data={data} route={route} optionNumber={optionNumber}/>}
-      <footer><span>waywise. <span>Built for a better way through the city.</span></span><span>TfL · Open-Meteo · OpenAI <span className="footer-divider">/</span> Map © OpenStreetMap contributors</span></footer>
-    </main>
-  </>;
+  return <main className={`map-app sheet-${sheetState}`} style={visualHeight ? {height: visualHeight} : undefined} onKeyDown={escape}>
+    <h1 className="sr-only">Waywise — London journey explorer</h1>
+    <JourneyMap {...{data, selectedId: selected, onSelectRoute: selectRoute, routesVisible, activeContextLayer, field, weatherVariable, weatherPeriod, weatherOpacity, fitToken, coverageToken}} onFeature={showFeature}/>
+    <header className="app-header"><a className="brand" href="/" aria-label="Waywise home"><span className="brand-mark"><Icon name="arrow"/></span>waywise<span className="brand-period">.</span></a><div className="mode-control" role="group" aria-label="Data mode"><button type="button" aria-pressed={!sample} disabled={working} onClick={() => changeSample(false)}><i/>Live</button><button type="button" aria-pressed={sample} disabled={working} onClick={() => changeSample(true)}>Sample</button></div></header>
+    <SearchDock mode={searchMode} onMode={setSearchMode} open={searchOpen} onOpen={value => {setSearchOpen(value); if (value) setSheetState('collapsed');}} journey={data} chatRef={chatRef} working={working}
+      controlsProps={{stations, origin, destination, preference, sample, stationBusy, working, busy, error, onOrigin: changeOrigin, onDestination: changeDestination, onPreference: changePreference, onSwap: () => {setOrigin(destination); setDestination(origin); clearJourney();}, onSubmit: submit, onSample: changeSample}}
+      chatProps={{onJourney: acceptJourney, busy: chatBusy, onBusyChange: setChatBusy, disabled: busy || stationBusy, sample, onLive: () => changeSample(false), aiConfigured: health?.openai_configured, acquire, release}}/>
+    <LayerSwitcher {...{routesVisible, activeContextLayer, field, weatherVariable, weatherPeriod, weatherOpacity, data, route}} onRoutes={() => setRoutesVisible(value => !value)} onContext={changeContext} onVariable={value => {setWeatherVariable(value); setFeature(null);}} onPeriod={value => {setWeatherPeriod(value); setFeature(null);}} onOpacity={setWeatherOpacity} onCoverage={() => setCoverageToken(value => value + 1)}/>
+    {(sample || warnings.length > 0 || error) && <aside className="global-notice" role="status" tabIndex={0}>{sample && <strong>Fictional sample · not live travel information.</strong>}{busy && data && <p>Updating · previous journey snapshot remains visible.</p>}{error && <p>{refreshFailed ? 'Refresh failed · previous snapshot retained. ' : ''}{error}</p>}{warnings.map((warning, index) => <p key={index}>{warning}</p>)}</aside>}
+    {!data && !busy && !selectedFeature && <div className="empty-map-hint"><Icon name="pin"/><div><strong>London, your way.</strong><p>Choose Journey or Ask AI above to compare station-to-station routes.</p></div></div>}
+    <button className="fit-journey" type="button" disabled={!data} onClick={() => {setSearchOpen(false); setFeature(null); setSheetState('partial'); setFitToken(value => value + 1);}}><Icon name="fit"/><span>Fit journey</span></button>
+    <ResultsDock {...{data, route, selectedFeature, field, weatherVariable, weatherPeriod, sheetState, working, busy}} onState={setSheetState} onSelect={selectRoute} onRefresh={() => submit(null, true)} onCloseFeature={() => {selectedFeature?.returnFocus?.(); setFeature(null); if (!data) setSheetState('collapsed');}}/>
+    <div className="snapshot-status" role="status"><span className={`snapshot-dot${sample ? ' sample' : ''}`}/><span>{sample ? 'Fictional sample' : busy && data ? 'Updating · previous snapshot' : refreshFailed ? 'Previous snapshot · refresh failed' : data ? `TfL retrieved ${londonTime(retrieved)} London` : 'London stations · leave now'}</span><span className="snapshot-credit"> · forecasts: Open-Meteo</span></div>
+  </main>;
 }
 
 createRoot(document.getElementById('root')).render(<App/>);

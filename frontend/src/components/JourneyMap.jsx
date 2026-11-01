@@ -1,182 +1,159 @@
 import React, {useEffect, useRef, useState} from 'react';
 import maplibregl from 'maplibre-gl';
-import {Icon, lineColor, londonTime} from '../ui.jsx';
+import {affectedLeg, weatherFeatures, weatherVariables} from '../mapData.js';
+import {lineColor} from '../ui.jsx';
 
-const clickableLayers = ['route-selected-transit', 'route-selected-walk', 'route-alternative-transit', 'route-alternative-walk'];
-const mapPadding = width => width < 500 ? {top: 108, right: 62, bottom: 45, left: 62} : {top: 100, right: 75, bottom: 60, left: 75};
+const routeLayers = ['route-selected-transit', 'route-selected-walk', 'route-alternative-transit', 'route-alternative-walk'];
+const empty = () => ({type: 'FeatureCollection', features: []});
 
-function forecastPopup(station, weather, role, sample) {
-  const content = document.createElement('div');
-  content.className = 'forecast-popup';
-  const title = document.createElement('strong');
-  title.textContent = `${sample ? 'Sample forecast' : 'Forecast'} near ${role}`;
-  content.append(title);
-  const name = document.createElement('p');
-  name.textContent = station.name;
-  content.append(name);
-  const hour = weather?.hours?.[0];
-  const lines = hour ? [
-    `${hour.temperature_c ?? '—'}°C · ${hour.rain_probability ?? '—'}% rain probability`,
-    `${hour.wind_kmh ?? '—'} km/h wind`,
-    `Forecast hour ${londonTime(hour.time)} · London time`,
-    sample ? 'Fictional sample · not retrieved' : `Retrieved ${londonTime(weather.retrieved_at)} · London time`,
-    weather.source,
-  ] : ['Endpoint forecast unavailable.'];
-  lines.filter(Boolean).forEach(text => {const line = document.createElement('p'); line.textContent = text; content.append(line);});
-  return content;
+function overlayPadding(map) {
+  const root = map.getContainer().closest('.map-app');
+  const rect = root.getBoundingClientRect();
+  const search = root.querySelector('[data-map-overlay="top"]')?.getBoundingClientRect();
+  const context = root.querySelector('[data-map-overlay="context"]')?.getBoundingClientRect();
+  const results = root.querySelector('[data-map-overlay="results"]')?.getBoundingClientRect();
+  const mobile = rect.width <= 760;
+  const top = mobile ? Math.max(search?.bottom || 0, context?.bottom || 0) - rect.top + 22 : (search?.bottom || rect.top + 90) - rect.top + 24;
+  const bottom = results ? rect.bottom - results.top + 20 : 84;
+  return {top: Math.min(top, rect.height * .4), bottom: Math.min(bottom, rect.height * .4), left: mobile ? 50 : 60, right: mobile ? 50 : Math.min((context?.width || 280) + 44, rect.width * .32)};
 }
 
-function ServiceContext({data, route}) {
-  if (!data || !route) return null;
-  const walking = route.legs.every(leg => leg.mode === 'walking');
-  const statuses = route.line_statuses || [];
-  const descriptions = [...new Set(statuses.flatMap(line => line.statuses.map(status => status.description)))];
-  const retrieved = data.sources.find(source => source.name === 'TfL line status')?.retrieved_at;
-  return <details className="map-service" key={`${data.generated_at || 'sample'}-${route.id}`}>
-    <summary><Icon name="train"/><span>Selected-route status<small>{data.sample ? 'Sample · not checked' : walking ? 'Walking route' : descriptions.join(' · ') || 'Status unavailable'}</small></span><Icon name="chevron"/></summary>
-    <div className="map-service-content">
-      <p className="context-time">{data.sample ? 'Fictional sample · no service check' : retrieved ? `Retrieved ${londonTime(retrieved)} · London time` : 'Retrieval time unavailable'}</p>
-      {walking ? <p>No public transport line status applies to this walking option.</p> : statuses.length ? statuses.map(line => <div className="status-line" key={line.id}><strong>{line.name}</strong><div className="status-labels">{line.statuses.map((status, index) => <span key={index}>{status.description}</span>)}</div>{[...new Set(line.statuses.map(status => status.reason).filter(Boolean))].map((reason, index) => <p key={index}>{reason}</p>)}</div>) : <p>No line status was returned for this route.</p>}
-      {route.legs.flatMap(leg => leg.disruptions).map((notice, index) => <p key={index}>{notice.description}</p>)}
-      <p className="essential-uncertainty">Line-wide reports do not measure this journey’s delay.</p>
-    </div>
-  </details>;
-}
+export default function JourneyMap({data, selectedId, onSelectRoute, onFeature, routesVisible, activeContextLayer, field, weatherVariable, weatherPeriod, weatherOpacity, fitToken, coverageToken}) {
+  const container = useRef(null), mapRef = useRef(null), latest = useRef(null);
+  const bounds = useRef(null), lastPlan = useRef(null);
+  const [ready, setReady] = useState(false), [error, setError] = useState('');
+  latest.current = {data, selectedId, onSelectRoute, onFeature, activeContextLayer, routesVisible};
 
-export default function JourneyMap({data, selectedId, onSelectRoute, onRefresh, working}) {
-  const container = useRef(null), mapRef = useRef(null), selectionRef = useRef(onSelectRoute);
-  const boundsRef = useRef(null), lastFit = useRef(null);
-  const [ready, setReady] = useState(false), [mapError, setMapError] = useState('');
-  const [forecast, setForecast] = useState(null);
-  const forecastPanel = useRef(null);
-  const route = data?.routes.find(item => item.id === selectedId);
-  selectionRef.current = onSelectRoute;
+  function fitJourney() {
+    if (mapRef.current && bounds.current) mapRef.current.fitBounds(bounds.current, {padding: overlayPadding(mapRef.current), maxZoom: 14, duration: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 500});
+  }
 
   useEffect(() => {
-    if (!forecast) return;
-    forecast.button.setAttribute('aria-expanded', 'true');
-    forecastPanel.current?.focus();
-    return () => forecast.button.setAttribute('aria-expanded', 'false');
-  }, [forecast]);
-
-  useEffect(() => {
-    let map;
+    let map, observer;
     try {
-      map = new maplibregl.Map({container: container.current, style: 'https://tiles.openfreemap.org/styles/positron', center: [-0.115, 51.508], zoom: 12, attributionControl: true});
+      map = new maplibregl.Map({container: container.current, style: 'https://tiles.openfreemap.org/styles/positron', center: [-.12, 51.515], zoom: 11.4, attributionControl: false, dragRotate: false, pitchWithRotate: false});
       mapRef.current = map;
-      map.addControl(new maplibregl.NavigationControl({showCompass: false}), 'top-left');
-      map.on('style.load', () => {setReady(true); setMapError('');});
-      map.on('error', () => setMapError('Some map data could not load. Route facts remain available in the sidebar.'));
+      map.addControl(new maplibregl.NavigationControl({showCompass: false}), 'top-right');
+      map.addControl(new maplibregl.AttributionControl({compact: true}), 'bottom-right');
+      map.on('style.load', () => {setReady(true); setError('');});
+      map.on('error', () => setError('Some map data could not load. Journey facts remain available in Details.'));
       const hits = point => {
-        const layers = clickableLayers.filter(id => map.getLayer(id));
-        // Keep thin and dashed paths usable without making the visible lines heavier.
-        const radius = window.matchMedia('(pointer: coarse)').matches ? 12 : 6;
-        const area = [[point.x - radius, point.y - radius], [point.x + radius, point.y + radius]];
-        return layers.length ? map.queryRenderedFeatures(area, {layers}) : [];
+        const layers = routeLayers.filter(id => map.getLayer(id));
+        const radius = window.matchMedia('(pointer: coarse)').matches ? 12 : 7;
+        return layers.length ? map.queryRenderedFeatures([[point.x - radius, point.y - radius], [point.x + radius, point.y + radius]], {layers}) : [];
       };
       map.on('click', event => {
-        const id = hits(event.point)[0]?.properties?.route_id;
-        if (id) selectionRef.current(id);
+        const hit = hits(event.point)[0]?.properties;
+        const state = latest.current;
+        if (hit) {
+          if (hit.route_id === state.selectedId && state.activeContextLayer === 'disruptions' && hit.affected) state.onFeature({type: 'disruption', index: Number(hit.leg_index)});
+          else state.onSelectRoute(hit.route_id);
+          return;
+        }
+        if (state.activeContextLayer === 'weather' && map.getLayer('weather-field')) {
+          const cell = map.queryRenderedFeatures(event.point, {layers: ['weather-field']})[0];
+          if (cell) state.onFeature({type: 'weather-cell', id: cell.properties.cell_id});
+        }
       });
-      map.on('mousemove', event => {map.getCanvas().style.cursor = hits(event.point).length ? 'pointer' : '';});
-      map.on('resize', () => {
-        if (boundsRef.current) map.fitBounds(boundsRef.current, {padding: mapPadding(container.current.clientWidth), maxZoom: 14, duration: 0});
+      map.on('mousemove', event => {
+        const weatherHit = latest.current.activeContextLayer === 'weather' && map.getLayer('weather-field') && map.queryRenderedFeatures(event.point, {layers: ['weather-field']}).length;
+        map.getCanvas().style.cursor = hits(event.point).length || weatherHit ? 'pointer' : '';
       });
-    } catch {setMapError('Map unavailable in this browser. Route facts remain available in the sidebar.');}
-    return () => {map?.remove(); mapRef.current = null;};
+      observer = new ResizeObserver(() => map.resize());
+      observer.observe(container.current);
+    } catch {setError('Map unavailable in this browser. Journey facts remain available in Details.');}
+    return () => {observer?.disconnect(); map?.remove(); mapRef.current = null;};
   }, []);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready) return;
-    const ordered = data ? [...data.routes.filter(item => item.id !== selectedId), ...data.routes.filter(item => item.id === selectedId)] : [];
-    const features = ordered.flatMap(item => item.legs.filter(leg => leg.geometry.length > 1).map(leg => ({
-      type: 'Feature', properties: {route_id: item.id, mode: leg.mode, selected: item.id === selectedId, color: lineColor(leg.mode === 'walking' ? 'walking' : leg.lines[0]?.name)},
-      geometry: {type: 'LineString', coordinates: leg.geometry},
-    })));
-    const collection = {type: 'FeatureCollection', features};
-    if (map.getSource('journeys')) map.getSource('journeys').setData(collection);
-    else {
-      map.addSource('journeys', {type: 'geojson', data: collection});
+    if (!map.getSource('journeys')) {
+      map.addSource('journeys', {type: 'geojson', data: empty()});
       const filter = (selected, walking) => ['all', ['==', ['get', 'selected'], selected], [walking ? '==' : '!=', ['get', 'mode'], 'walking']];
       const layout = {'line-cap': 'round', 'line-join': 'round'};
       map.addLayer({id: 'route-alternative-transit', type: 'line', source: 'journeys', filter: filter(false, false), layout, paint: {'line-color': ['get', 'color'], 'line-width': 5, 'line-opacity': .3}});
       map.addLayer({id: 'route-alternative-walk', type: 'line', source: 'journeys', filter: filter(false, true), layout, paint: {'line-color': ['get', 'color'], 'line-width': 4, 'line-opacity': .35, 'line-dasharray': [1.5, 1.5]}});
-      map.addLayer({id: 'route-selected-halo', type: 'line', source: 'journeys', filter: ['==', ['get', 'selected'], true], layout, paint: {'line-color': '#ffffff', 'line-width': 10, 'line-opacity': .95}});
+      map.addLayer({id: 'route-warning', type: 'line', source: 'journeys', filter: ['all', ['==', ['get', 'selected'], true], ['==', ['get', 'affected'], true]], layout, paint: {'line-color': '#d58b25', 'line-width': 15, 'line-opacity': .65, 'line-dasharray': [1, 1]}});
+      map.addLayer({id: 'route-selected-halo', type: 'line', source: 'journeys', filter: ['==', ['get', 'selected'], true], layout, paint: {'line-color': '#fff', 'line-width': 10, 'line-opacity': .95}});
       map.addLayer({id: 'route-selected-transit', type: 'line', source: 'journeys', filter: filter(true, false), layout, paint: {'line-color': ['get', 'color'], 'line-width': 6}});
       map.addLayer({id: 'route-selected-walk', type: 'line', source: 'journeys', filter: filter(true, true), layout, paint: {'line-color': ['get', 'color'], 'line-width': 5, 'line-dasharray': [1.5, 1.5]}});
+      map.addSource('weather-cells', {type: 'geojson', data: empty()});
+      map.addSource('weather-coverage', {type: 'geojson', data: empty()});
+      const before = map.getStyle().layers.find(layer => layer.type === 'symbol')?.id;
+      map.addLayer({id: 'weather-field', type: 'fill', source: 'weather-cells', paint: {'fill-color': '#e7f3fc', 'fill-opacity': .3}}, before);
+      map.addLayer({id: 'weather-cell-edges', type: 'line', source: 'weather-cells', filter: ['==', ['get', 'available'], true], paint: {'line-color': '#ffffff', 'line-width': .6, 'line-opacity': .25}}, before);
+      map.addLayer({id: 'weather-missing', type: 'line', source: 'weather-cells', filter: ['==', ['get', 'available'], false], paint: {'line-color': '#805f46', 'line-width': 1, 'line-dasharray': [3, 3]}}, before);
+      map.addLayer({id: 'weather-boundary', type: 'line', source: 'weather-coverage', paint: {'line-color': '#566d78', 'line-width': 1.5, 'line-dasharray': [3, 3]}}, before);
     }
-    if (data && lastFit.current !== data) {
-      const coords = [...features.flatMap(feature => feature.geometry.coordinates), [data.origin.lon, data.origin.lat], [data.destination.lon, data.destination.lat]];
-      const bounds = new maplibregl.LngLatBounds();
-      coords.forEach(coordinate => bounds.extend(coordinate));
-      boundsRef.current = bounds;
-      map.fitBounds(bounds, {padding: mapPadding(container.current.clientWidth), maxZoom: 14, duration: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 650});
-      lastFit.current = data;
+    const ordered = data ? [...data.routes.filter(item => item.id !== selectedId), ...data.routes.filter(item => item.id === selectedId)] : [];
+    const features = ordered.flatMap(route => route.legs.flatMap((leg,index) => leg.geometry.length < 2 ? [] : [{
+      type: 'Feature', properties: {route_id: route.id, leg_index: index, mode: leg.mode, selected: route.id === selectedId, affected: affectedLeg(leg, route).affected, color: lineColor(leg.mode === 'walking' ? 'walking' : leg.lines[0]?.name)},
+      geometry: {type: 'LineString', coordinates: leg.geometry},
+    }]));
+    map.getSource('journeys').setData({type: 'FeatureCollection', features});
+    [...routeLayers, 'route-selected-halo'].forEach(id => map.setLayoutProperty(id, 'visibility', routesVisible ? 'visible' : 'none'));
+    map.setLayoutProperty('route-warning', 'visibility', routesVisible && activeContextLayer === 'disruptions' ? 'visible' : 'none');
+    if (data && lastPlan.current !== data) {
+      const next = new maplibregl.LngLatBounds();
+      [...features.flatMap(feature => feature.geometry.coordinates), [data.origin.lon, data.origin.lat], [data.destination.lon, data.destination.lat]].forEach(coordinate => next.extend(coordinate));
+      bounds.current = next; lastPlan.current = data;
+      const frame = requestAnimationFrame(fitJourney);
+      return () => cancelAnimationFrame(frame);
     }
-    if (!data) {boundsRef.current = null; lastFit.current = null;}
-  }, [data, selectedId, ready]);
+    if (!data) {bounds.current = null; lastPlan.current = null;}
+  }, [data, selectedId, routesVisible, activeContextLayer, ready]);
 
   useEffect(() => {
     const map = mapRef.current;
-    setForecast(null);
-    if (!map || !ready || !data) return;
-    const mobile = window.matchMedia('(max-width: 760px)');
-    const markers = [data.origin, data.destination].map((station, index) => {
-      const role = index ? 'destination' : 'origin';
-      const weather = data.weather.find(item => item.location === station.name) || (data.sample ? data.weather[0] : null);
-      const hour = weather?.hours?.[0];
-      const button = document.createElement('button');
-      button.type = 'button'; button.className = 'weather-marker';
-      button.setAttribute('aria-label', `${data.sample ? 'Sample forecast' : 'Forecast'} near ${role}: ${station.name}`);
-      button.setAttribute('aria-expanded', 'false');
-      button.setAttribute('aria-haspopup', 'dialog');
-      button.title = `Forecast near ${role} · select for forecast hour and source`;
-      const letter = document.createElement('span'); letter.className = 'endpoint-letter'; letter.textContent = index ? 'B' : 'A';
-      const text = document.createElement('span'); text.className = 'endpoint-weather'; text.textContent = hour ? `${hour.temperature_c ?? '—'}° · ${hour.rain_probability ?? '—'}%` : 'Forecast —';
-      button.append(letter, text);
-      const coordinates = [station.lon, station.lat];
-      const popup = new maplibregl.Popup({offset: 24, maxWidth: '250px'}).setLngLat(coordinates).setDOMContent(forecastPopup(station, weather, role, data.sample));
-      popup.on('open', () => {
-        button.setAttribute('aria-expanded', 'true');
-        popup.getElement().setAttribute('role', 'dialog');
-        popup.getElement().setAttribute('aria-label', `Forecast near ${role}`);
-      });
-      popup.on('close', () => button.setAttribute('aria-expanded', 'false'));
-      // Native button activation handles Enter/Space once, as well as pointer clicks.
-      button.addEventListener('click', event => {
-        event.stopPropagation();
-        if (mobile.matches) {
-          popup.remove();
-          setForecast({station, weather, role, button});
-          return;
-        }
-        if (popup.isOpen()) popup.remove(); else popup.addTo(map);
-      });
-      const marker = new maplibregl.Marker({element: button, anchor: 'bottom'}).setLngLat(coordinates).addTo(map);
-      return {marker, popup};
-    });
-    const closeForecast = () => {setForecast(null); markers.forEach(({popup}) => popup.remove());};
-    mobile.addEventListener('change', closeForecast);
-    return () => {mobile.removeEventListener('change', closeForecast); markers.forEach(({marker, popup}) => {popup.remove(); marker.remove();});};
-  }, [data, ready]);
+    if (!map || !ready || !map.getSource('weather-cells')) return;
+    const visible = activeContextLayer === 'weather' && field.status === 'ready';
+    map.getSource('weather-cells').setData(weatherFeatures(visible ? field.data : null, weatherVariable, weatherPeriod));
+    const area = field.data?.coverage_bounds;
+    map.getSource('weather-coverage').setData(area ? {type: 'FeatureCollection', features: [{type: 'Feature', properties: {}, geometry: {type: 'Polygon', coordinates: [[[area[0],area[1]],[area[2],area[1]],[area[2],area[3]],[area[0],area[3]],[area[0],area[1]]]]}}]} : empty());
+    ['weather-field', 'weather-cell-edges', 'weather-missing', 'weather-boundary'].forEach(id => map.setLayoutProperty(id, 'visibility', visible ? 'visible' : 'none'));
+    const scale = ['interpolate', ['linear'], ['get', 'value'], ...weatherVariables[weatherVariable].stops];
+    map.setPaintProperty('weather-field', 'fill-color', ['case', ['get', 'available'], scale, 'rgba(0,0,0,0)']);
+    map.setPaintProperty('weather-field', 'fill-opacity', ['case', ['get', 'available'], weatherVariable === 'rain_probability' ? ['*', weatherOpacity, ['interpolate', ['linear'], ['get','value'], 0, .3, 100, 1]] : weatherOpacity, 0]);
+  }, [ready, activeContextLayer, field.status, field.data, weatherVariable, weatherPeriod, weatherOpacity]);
 
-  const journeysAt = data?.sources.find(source => source.name === 'TfL journeys')?.retrieved_at;
-  const weatherAt = data?.weather.find(item => item.retrieved_at)?.retrieved_at;
-  const warnings = data?.warnings.map(warning => {
-    const index = data.routes.findIndex(item => warning.startsWith(`${item.id}:`));
-    return index < 0 ? warning : warning.replace(`${data.routes[index].id}:`, `Option ${index + 1}:`);
-  }) || [];
-  const missingGeometry = data?.routes.some(item => item.legs.some(leg => leg.geometry.length < 2)) && !warnings.some(warning => /geometry/i.test(warning));
-  return <section className="map-panel" aria-label="Journey map and context">
-    <div className="map-panel-heading"><div><h2>Journey map</h2><p>{data ? data.sample ? 'Fictional sample · schematic paths' : `TfL journeys retrieved ${londonTime(journeysAt)} · London time` : 'Compare the ways across London'}</p></div>{data && <button className="refresh-button" type="button" disabled={working} onClick={onRefresh} aria-label="Refresh search"><Icon name="refresh"/><span>{working ? 'Updating…' : 'Refresh'}</span></button>}</div>
-    <div className="map-frame"><div ref={container} className="map-canvas" aria-label="Map showing returned journey options"/><ServiceContext data={data} route={route}/>{mapError && <p className="map-error" role="status">{mapError}</p>}</div>
-    {forecast && data && <section className="mobile-forecast" ref={forecastPanel} role="dialog" aria-label={`Forecast near ${forecast.role}`} tabIndex={-1}>
-      <div className="mobile-forecast-heading"><h3>{data.sample ? 'Sample forecast' : 'Forecast'} near {forecast.role}</h3><button type="button" aria-label="Close forecast details" onClick={() => {forecast.button.focus(); setForecast(null);}}>×</button></div>
-      <p>{forecast.station.name}</p>
-      {forecast.weather?.hours?.[0] ? <><p className="forecast-hour">Forecast hour {londonTime(forecast.weather.hours[0].time)} · London time</p><p>{data.sample ? 'Fictional sample · not retrieved' : `Retrieved ${londonTime(forecast.weather.retrieved_at)} · London time`}</p><p>{forecast.weather.hours[0].temperature_c ?? '—'}°C · {forecast.weather.hours[0].rain_probability ?? '—'}% rain probability · {forecast.weather.hours[0].wind_kmh ?? '—'} km/h wind</p><small>{forecast.weather.source}</small></> : <p>Endpoint forecast unavailable.</p>}
-    </section>}
-    <div className="map-legend" aria-label="Route map legend"><span><i className="legend-selected"/>Selected</span><span><i className="legend-alternative"/>Alternatives · click to select</span><span><i className="legend-walking"/>Walking</span></div>
-    {data && <><p className="map-forecast-note">A / B: forecast near origin / destination. Select a marker for its forecast hour and source.</p><div className="map-source-times"><span>{data.sample ? 'Synthetic example · not live' : weatherAt ? `Endpoint forecasts retrieved ${londonTime(weatherAt)}` : 'Endpoint forecasts unavailable'}</span><span>Retrieved snapshots · refresh for updates</span></div>{(warnings.length > 0 || missingGeometry) && <div className="map-warnings" role="status">{missingGeometry && <p>Some route sections have no geometry and are not drawn.</p>}{warnings.map((warning, index) => <p key={index}>{warning}</p>)}</div>}</>}
-  </section>;
+  useEffect(() => {if (fitToken > 0) requestAnimationFrame(fitJourney);}, [fitToken]);
+  useEffect(() => {
+    const map = mapRef.current, area = field.data?.coverage_bounds;
+    if (coverageToken && map && ready && area) map.fitBounds([[area[0],area[1]],[area[2],area[3]]], {padding: overlayPadding(map), duration: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 500});
+  }, [coverageToken]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready || !data) return;
+    const markers = [];
+    if (routesVisible || activeContextLayer === 'weather') {
+      [data.origin, data.destination].forEach((station,index) => {
+        const weather = data.weather.find(item => item.location === station.name) || (data.sample ? data.weather[0] : null);
+        const hour = weather?.hours[0];
+        const button = document.createElement('button');
+        button.type = 'button'; button.className = `endpoint-marker${activeContextLayer === 'weather' ? ' with-forecast' : ''}`;
+        button.setAttribute('aria-label', `${activeContextLayer === 'weather' ? 'Forecast near' : 'Journey'} ${index ? 'destination' : 'origin'}: ${station.name}`);
+        const letter = document.createElement('span'); letter.className = 'endpoint-letter'; letter.textContent = index ? 'B' : 'A'; button.append(letter);
+        if (activeContextLayer === 'weather') {const text = document.createElement('span'); text.textContent = hour ? `☂ ${hour.temperature_c ?? '—'}°C · ${hour.rain_probability ?? '—'}%` : 'Forecast unavailable'; button.append(text);}
+        button.addEventListener('click', event => {event.stopPropagation(); latest.current.onFeature({type: 'endpoint', index, returnFocus: () => {if (button.isConnected) button.focus();}});});
+        markers.push(new maplibregl.Marker({element: button, anchor: 'bottom'}).setLngLat([station.lon,station.lat]).addTo(map));
+      });
+    }
+    const route = data.routes.find(item => item.id === selectedId);
+    if (routesVisible && activeContextLayer === 'disruptions' && route) {
+      route.legs.forEach((leg,index) => {
+        const context = affectedLeg(leg, route);
+        if (!context.affected || leg.geometry.length < 2) return;
+        const button = document.createElement('button'); button.type = 'button'; button.className = 'disruption-marker';
+        button.textContent = `△ ${context.descriptions.join(' · ') || 'Route notice'}`;
+        button.setAttribute('aria-label', `Line context: ${context.descriptions.join(', ') || 'route notice'}`);
+        button.addEventListener('click', event => {event.stopPropagation(); latest.current.onFeature({type: 'disruption', index, returnFocus: () => {if (button.isConnected) button.focus();}});});
+        markers.push(new maplibregl.Marker({element: button}).setLngLat(leg.geometry[Math.floor((leg.geometry.length - 1) / 2)]).addTo(map));
+      });
+    }
+    return () => markers.forEach(marker => marker.remove());
+  }, [data, selectedId, activeContextLayer, routesVisible, ready]);
+
+  return <section className="map-background" aria-label="London journey map"><div ref={container} className="map-canvas"/>{error && <p className="map-error" role="status">{error}</p>}<div className="map-key" aria-label="Map legend"><span><i/>Selected</span><span><i className="muted"/>Alternative</span><span><i className="walking"/>Walking</span>{activeContextLayer === 'weather' && <span>Forecasts · tap a point or sampling area</span>}</div></section>;
 }

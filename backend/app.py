@@ -348,6 +348,8 @@ async def plan(request: PlanRequest):
 
 from backend.chat import router as chat_router
 app.include_router(chat_router)
+from backend.map_weather import router as map_weather_router
+app.include_router(map_weather_router)
 
 # Production uses one origin: FastAPI serves the Vite build after API routes.
 if (ROOT / 'frontend' / 'dist').is_dir():

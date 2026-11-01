@@ -27,6 +27,10 @@ export function Icon({name, ...props}) {
     spark: 'm12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5Z',
     swap: 'M4 8h15l-4-4M20 16H5l4 4', refresh: 'M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 12-2l2 2M18 17a7 7 0 0 1-12 2l-2-2',
     chevron: 'm6 9 6 6 6-6',
+    search: 'M21 21l-5-5M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0',
+    layers: 'm12 3 10 5-10 5L2 8Zm-10 9 10 5 10-5M2 17l10 5 10-5',
+    fit: 'M3 9V3h6m6 0h6v6M3 15v6h6m6 0h6v-6',
+    warning: 'm12 3 10 18H2ZM12 9v5m0 3h.01',
   };
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}><path d={paths[name] || paths.pin}/></svg>;
 }
