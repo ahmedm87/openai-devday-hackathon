@@ -7,9 +7,10 @@ Prepared 1 November 2026, around 13:50 London time. Submission deadline: **17:00
 Ship A: one complete station-to-station journey with real TfL options, relevant disruption context, endpoint weather, selectable map routes and a grounded OpenAI explanation. C, a conversational interface, is optional after the core product is verified and deployed.
 
 - Public repository and initial React/MapLibre/FastAPI implementation are on `main`.
-- All nine backend tests and the frontend production build passed in [GitHub Actions](https://github.com/ahmedm87/openai-devday-hackathon/actions/runs/41311036073).
-- A local `.env` now exists. Its values and live API access have **not** been verified.
-- Browser testing, the complete live journey, deployment and the demo video remain unverified or unfinished. Passing CI does not establish those outcomes.
+- All 12 backend tests and the frontend production build pass locally and in [integration-branch CI](https://github.com/ahmedm87/openai-devday-hackathon/actions/runs/41314399045).
+- Local credentials have been verified with real TfL, Open-Meteo and OpenAI calls. Secret values remain outside Git.
+- Two real journey pairs and the desktop browser flow have been checked. See the [verification record](VERIFICATION.md) for exact coverage and limitations.
+- Localhost is available for user testing. Deployment files are prepared; the user requested preparation only, so a hosted app and final video remain unfinished. Full mobile-device testing remains outstanding.
 - Synthetic sample mode is available for interface checks. Never describe it as live data or an AI-generated response.
 
 ## Two-person work split
@@ -39,13 +40,13 @@ If starting late, compress the optional work first. Do not take time from the fi
 
 ### Real journey and evidence — backend owner
 
-- [ ] `.env` is ignored by Git and contains only local runtime configuration; no key values appear in commits or screenshots.
-- [ ] `/api/health` reports the intended API configuration. A configured flag only establishes presence, so also verify actual provider calls.
-- [ ] Two different real station pairs return usable routes. Confirm durations and route names against the retrieved TfL response.
+- [x] `.env` is ignored by Git; secret values have not been added to commits or screenshots.
+- [x] `/api/health` reports the intended API configuration, and actual provider calls have been verified.
+- [x] Two different real station pairs return usable routes with retrieved durations and route names.
 - [ ] Only line statuses relevant to returned routes are attached. Do not turn a line-level disruption into an invented number of delay minutes.
 - [ ] Forecast hours overlap the journey in London time; forecast coverage is described as near the endpoints.
-- [ ] A real OpenAI explanation uses the returned evidence, preserves the selected route and states missing information. Review it manually; valid JSON alone does not establish grounding.
-- [ ] Missing weather, line status or AI output is explicit and does not discard usable TfL routes.
+- [x] Real OpenAI output selects context from a computed evidence catalog; the backend renders verified wording and rejects unknown evidence IDs. It preserves the recommended route and does not infer unmeasured delays, cloud cover or guaranteed zero walking.
+- [x] Tests verify explicit missing weather/status/AI states while preserving usable route facts.
 
 ### Interface and deployment — frontend owner
 
@@ -55,7 +56,8 @@ If starting late, compress the optional work first. Do not take time from the fi
 - [ ] Sample mode is visibly fictional and never silently replaces a failed live request.
 - [ ] Check a narrow screen, identical stations, no route results and a provider failure.
 - [ ] Public app loads while signed out, and a full journey succeeds there. Keep runtime secrets on the server.
-- [ ] Before enabling unrestricted public billable AI calls, add a request limit and configure the OpenAI project's spending controls.
+- [x] Add a per-process shared AI request cap with an explicit limit message.
+- [ ] Before public billable AI access, configure the OpenAI project's spending controls and host-level limits. No hosted deployment has been performed.
 
 ## Optional C: decision at 15:15
 
