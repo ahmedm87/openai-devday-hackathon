@@ -31,7 +31,7 @@ function JourneyMap({data, route}) {
       map = new maplibregl.Map({container:container.current,style:'https://tiles.openfreemap.org/styles/positron',center:[-0.115,51.508],zoom:12,attributionControl:true});
       mapRef.current = map;
       map.addControl(new maplibregl.NavigationControl({showCompass:false}), 'bottom-right');
-      map.on('load',()=>{setReady(true);setMapError('');});
+      map.on('style.load',()=>{setReady(true);setMapError('');});
       map.on('error',()=>setMapError('Some map tiles could not load. Route details remain available.'));
     } catch { setMapError('Map unavailable in this browser. Route details remain available.'); }
     return ()=> { map?.remove(); mapRef.current=null; };

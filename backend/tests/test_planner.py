@@ -1,4 +1,5 @@
 import asyncio
+import pytest
 from unittest.mock import AsyncMock
 
 from fastapi.testclient import TestClient
@@ -104,3 +105,21 @@ def test_ai_request_cap_preserves_routes_without_calling_provider(monkeypatch):
     result = asyncio.run(module.explain({}))
     assert result['status'] == 'rate_limited'
     assert 'route facts remain available' in result['summary']
+
+
+def test_ai_can_only_select_evidence_backed_wording():
+    from backend.sample import sample_plan
+    payload = sample_plan()
+    selection = module.ExplanationSelection(context_ids=['rain_forecast'], tradeoff_ids=['alternative_2'], limitation_ids=[])
+    result = module.render_explanation(payload, selection)
+    assert '70%' in result['summary']
+    assert 'no walking is needed' not in result['summary']
+    assert any('do not prove' in item for item in result['limitations'])
+    assert any('24 minutes' in item for item in result['tradeoffs'])
+
+
+def test_unknown_ai_evidence_is_rejected():
+    from backend.sample import sample_plan
+    selection = module.ExplanationSelection(context_ids=['clear_weather_and_no_delays'], tradeoff_ids=[], limitation_ids=[])
+    with pytest.raises(ValueError, match='unknown evidence'):
+        module.render_explanation(sample_plan(), selection)

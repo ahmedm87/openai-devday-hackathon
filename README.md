@@ -71,7 +71,11 @@ Production accepts the host's `PORT` variable. Configure runtime secrets through
 - [TfL Unified API](https://api.tfl.gov.uk/swagger/docs/v1) provides stations, journey geometry and line status. Some geometry may be missing. Line status is not a measured delay for the individual journey.
 - [Open-Meteo](https://open-meteo.com/) provides hourly forecasts near the origin and destination, not weather along the entire route. Forecast times and retrieval times are shown separately. Provider update times are unavailable when not supplied.
 - London timestamps use `Europe/London`, including daylight saving. Station data is cached for one hour; journey, status and forecast data are fetched per search.
-- The AI interprets compact retrieved evidence. It can still make mistakes; route facts remain visible and missing data is explicit.
+- The AI selects useful context, tradeoffs and limitations from an evidence catalog computed by the backend. The server renders fixed factual wording and rejects unknown evidence IDs, preventing free-form claims about unmeasured delays, clear skies or guaranteed zero walking. This does not make provider forecasts or journey estimates guarantees.
+
+## Deployment preparation
+
+See [deployment handoff](docs/DEPLOYMENT.md) for the container contract, local Compose rehearsal and host setup checklist. Deployment files are prepared; no hosted app has been created. `AI_REQUESTS_PER_MINUTE` defaults to 10 across all visitors in a single process, with explicit limit messages. Configure provider spending controls and use a shared limiter before scaling to multiple replicas.
 
 ## Credits and collaboration
 
